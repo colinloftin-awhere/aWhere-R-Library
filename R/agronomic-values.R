@@ -1,156 +1,102 @@
-#' @title Get Agronomic Values Fields.
+#' @title agronomic_values_fields
 #'
 #' @description
-#' \code{agronomic_values_fields} calls Agronomic Values and Accumulations Endpoint of API using Field Location Construct
+#' \code{agronomic_values_fields} pulls agronomic data from aWhere's API based on field id
 #'
 #' @details
+#' This function returns agronomic data on growing degree days (GDDs), potential evapotranspiration (PET), Precipitation over
+#' potential evapotranspiration (P/PET), accumulated GDDs, accumulated precipitation, accumulated PET, and
+#' accumulated P/PET.  Default units are returned by the API.
+#'
 #' Agronomic Values are calculated numbers that can be used to show the agronomic status of a field or crop.
 #' These figures can be used, for example, to track and predict plant growth or identify water stress.
 #' Accumulated values allow growers to easily identify how the weather has been over the season.
 #' Both sets of data are commonly used on small and large farms alike.  This is a very flexible API
 #' that supports a wide variety of configurations to get exactly the data you want as efficiently as
 #' possible. It's also designed to work with the Fields and Plantings system to reduce the amount of input.
-#' While a planting is not required to use this API, be sure to create Plantings for your Fields in order
-#' to get the most out of the aWhere platform.  This function returns GDDs, Pet, P/Pet, accumulated GDD,
-#' accumulated Precipitation, accumulated Pet, accumulated P/Pet.  Returns data in API default units (metric)
+#' While a planting is not required to use this API, creating a Planting for your Fields will allow you
+#' to get the most out of the aWhere platform.
+#'
+#' Note about dates: The system does not adjust for any difference in dates between the location of the user
+#'           and where data is being requested from.  It is the responsibility of the user to ensure a valid
+#'           date range is specified given any differences in timezone.  These differences can have implications
+#'           for whether a given date should be requested from the daily_observed functions or the forecast functions
 #'
 #' @references http://developer.awhere.com/api/reference/agronomics/values
 #'
-#' @param - field_id: the field_id having previously been created with the createField Function
-#' @param - day_start: required, character string of start date in form: YYYY-MM-DD
-#' @param - day_end: required, character string of end date in form: YYYY-MM-DD
-#' @param - accumulation_start_date: If you want to start counting accumulations from
+#' @param - field_id: the field_id associated with the location for which you want to pull data.
+#' Field IDs are created using the create_field function. (string)
+#' @param - day_start: character string of the first day for which you want to retrieve data, in the form: YYYY-MM-DD
+#' @param - day_end: character string of the last day for which you want to retrieve data, in the form: YYYY-MM-DD
+#' @param - propertiesToInclude: character vector of properties to retrieve from API.  Valid values are accumulations, gdd, pet, ppet, accumulatedGdd, accumulatedPrecipitation, accumulatedPet, accumulatedPpet (optional)
+#' @param - accumulation_start_date: Allows the user to start counting accumulations from
 #'                                 before the specified start date (or before the
-#'                                 planting date if using the most recent Planting),
-#'                                 use this parameter to specify the date from which
-#'                                 you wish to start counting. The daily values object
+#'                                 planting date if using the most recent planting).
+#'                                 Use this parameter to specify the date from which
+#'                                 you wish to start counting, in the form: YYYY-MM-DD.
+#'                                 The daily values object
 #'                                 will still only return the days between the start
-#'                                 and end date. This date must come before the start date.
+#'                                 and end date. This date must come before the start date. (optional)
 #' @param - gdd_method: There are variety of equations available for calculating growing degree-days.
 #'                     Valid entries are: 'standard', 'modifiedstandard', 'min-temp-cap', 'min-temp-constant'
 #'                     See the API documentation for a description of each method.  The standard
-#'                     method will be used if none is specified
+#'                     method will be used if none is specified. (character - optional)
 #' @param - gdd_base_temp: The base temp to use for the any of the GDD equations. The default value of 10 will
-#'                       be used if none is specified
+#'                       be used if none is specified. (optional)
 #' @param - gdd_min_boundary: The minimum boundary to use in the selected GDD equation.
 #'                           The behavior of this value is different depending on the equation you're using
-#'                           The default value of 10 will be used if none is specified
+#'                           The default value of 10 will be used if none is specified. (optional)
 #' @param - gdd_max_boundary: The max boundary to use in the selected GDD equation. The
 #'                          behavior of this value is different depending on the equation you're using.
-#'                          The default value of 30 will be used if none is specified
-#' @return data.table of requested data for dates requested
+#'                          The default value of 30 will be used if none is specified. (optional)
+#' @param - keyToUse: aWhere API uid to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#'
+#' @import httr
+#' @import data.table
+#' @import lubridate
+#' @import jsonlite
+#'
+#' @return dataframe of requested data for dates requested
 #'
 #' @examples
-#' \dontrun{agronomic_values_fields('field123','2015-07-01','2015-07-31','','standard','10','10','30')
-#' agronomic_values_fields("field123", day_start = "2016-07-01", day_end = "2016-07-31", accumulation_start_date = "2016-06-01", gdd_method = "modifiedstandard", gdd_base_temp = "10", gdd_min_boundary = "10", gdd_max_boundary = "30")}
+#' \dontrun{agronomic_values_fields(field_id = "field_test"
+#'                                  ,day_start = "2018-05-01"
+#'                                  ,day_end = "2018-05-31"
+#'                                  ,gdd_method = "modifiedstandard"
+#'                                  ,gdd_base_temp = 10
+#'                                  ,gdd_min_boundary = 10
+#'                                  ,gdd_max_boundary = 30)}
 #' @export
 
-agronomic_values_fields <- function(field_id,
-                                    day_start = '', day_end = '',
-                                    accumulation_start_date = '',gdd_method = 'standard',gdd_base_temp = '10',
-                                    gdd_min_boundary = '10', gdd_max_boundary = '30') {
-  
-  if (exists('awhereEnv75247') == FALSE) {
-    warning('Please Run the Command \'get_token()\' and then retry running command. \n')
-    return()
-  }
-  
-  if (exists('uid', envir = awhereEnv75247) == FALSE |
-      exists('secret', envir = awhereEnv75247) == FALSE |
-      exists('token', envir = awhereEnv75247) == FALSE) {
-    warning('Please Run the Command \'get_token()\' and then retry running command. \n')
-    return()
-  }
-  
-  currentFields <- get_fields(field_id)
-  if ((field_id %in% currentFields$field_id) == FALSE) {
-    warning('The Provided field name is not a field currently associated with your account. \n
-            Please create the field before proceeding. \n')
-    return()
-  }
-  
-  if (day_start == '' & day_end != '') {
-    warning('The day_end is specified so must day_start. Please correct\n')
-    return()
-  }
-  
-  if ((day_start != '') == TRUE) {
-    if (suppressWarnings(is.na(ymd(day_start))) == TRUE) {
-      warning('The Start Date is Not Properly Formatted.  Please change to proper format. \n')
-      return()
-    } else if (ymd(day_start) > ymd(Sys.Date()) - days(1)) {
-      warning('By default, this function can only be used to access data up until yesterday. \n
-              Use the GetForecast function to request data from today onward.\n')
-      return()
-    }# else if (ymd(day_start) <= ymd(Sys.Date())-months(30)) {
-    # warning('By default, the aWhere APIs only allow daily data from the previous 30 months. \n
-    #        Use the Norms API for long-term averages or speak to your account manager for longer access.\n')
-    # return()
-    #}
-  }
-  
-  if ((day_end != '') == TRUE) {
-    if (suppressWarnings(is.na(ymd(day_end))) == TRUE) {
-      warning('The End Date is Not Properly Formatted.  Please change to proper format. \n')
-      return()
-    } else if (ymd(day_end) > ymd(Sys.Date()) - days(1)) {
-      warning('By default, this function can only be used to access data up until yesterday. \n
-              Use the GetForecast function to request data from today onward.\n')
-      return()
-    }# else if (ymd(day_end) <= ymd(Sys.Date())-months(30)) {
-    # warning('By default, the aWhere APIs only allow daily data from the previous 30 months. \n
-    #        Use the Norms API for long-term averages or speak to your account manager for longer access.\n')
-    # return()
-    #}
-    
-    if ((day_start != '') == TRUE) {
-      if ((ymd(day_start) > ymd(day_end)) == TRUE) {
-        warning('The Start Date must come before or be equal to the End Date.  Please change. \n')
-        return()
-      }
-    }
-  }
-  
-  if ((accumulation_start_date != '') == TRUE) {
-    if (suppressWarnings(is.na(ymd(accumulation_start_date))) == TRUE) {
-      warning('The Accumulation Start Date is Not Properly Formatted.  Please change to proper format. \n')
-      return()
-    }
-  }
-  
-  if ((gdd_method %in% c('standard','modifiedstandard','min-temp-cap','min-temp-constant')) == FALSE) {
-    warning('Valid values for the GDD method used to calculate growing degree days are \n
-            \'standard\', \'modifiedstandard\', \'min-temp-cap\', \'min-temp-constant\'.\n
-            Please change gdd_method to one of these values. \n')
-    return()
-  }
-  
-  if (suppressWarnings(is.na(as.integer(gdd_base_temp))) == TRUE) {
-    warning('The gdd_base_temp parameter is not a valid value.  Please correct. \n')
-    return()
-  }
-  
-  if (suppressWarnings(is.na(as.integer(gdd_min_boundary))) == TRUE) {
-    warning('The gdd_min_boundary parameter is not a valid value.  Please correct. \n')
-    return()
-  }
-  
-  if (suppressWarnings(is.na(as.integer(gdd_max_boundary))) == TRUE) {
-    warning('The gdd_max_boundary parameter is not a valid value.  Please correct. \n')
-    return()
-  }
-  
-  
-  
-  
+agronomic_values_fields <- function(field_id
+                                    ,day_start
+                                    ,day_end
+                                    ,propertiesToInclude = ''
+                                    ,accumulation_start_date = ''
+                                    ,gdd_method = 'standard'
+                                    ,gdd_base_temp = 10
+                                    ,gdd_min_boundary = 10
+                                    ,gdd_max_boundary = 30
+                                    ,keyToUse = awhereEnv75247$uid
+                                    ,secretToUse = awhereEnv75247$secret
+                                    ,tokenToUse = awhereEnv75247$token) {
+
+  checkCredentials(keyToUse,secretToUse,tokenToUse)
+  checkValidField(field_id,keyToUse,secretToUse,tokenToUse)
+  checkValidStartEndDatesAgronomics(day_start,day_end)
+  checkGDDParams(gdd_method,gdd_base_temp,gdd_min_boundary,gdd_max_boundary)
+  checkAccumulationStartDate(accumulation_start_date, day_start)
+  checkPropertiesEndpoint('agronomics',propertiesToInclude)
+
   # Create query
-  
   urlAddress <- "https://api.awhere.com/v2/agronomics"
-  
+
   strBeg <- paste0('/fields')
   strCoord <- paste0('/',field_id)
   strType <- paste0('/agronomicvalues')
-  
+
   if (as.character(day_start) != '' & as.character(day_end) != '') {
     strDates <- paste0('/',day_start,',',day_end)
   } else if (day_end != '') {
@@ -158,247 +104,351 @@ agronomic_values_fields <- function(field_id,
   } else {
     strDates <- ''
   }
-  
-  gdd_methodString      <- paste0('?gddMethod=',gdd_method)
+
+  if (accumulation_start_date != '') {
+    strAccumulation <- paste0('&accumulationStartDate=',accumulation_start_date)
+  } else {
+    strAccumulation <- ''
+  }
+
+  gdd_methodString       <- paste0('?gddMethod=',gdd_method)
   gdd_base_tempString    <- paste0('&gddBaseTemp=',gdd_base_temp)
   gdd_min_boundaryString <- paste0('&gddMinBoundary=',gdd_min_boundary)
   gdd_max_boundaryString <- paste0('&gddMaxBoundary=',gdd_max_boundary)
-  
-  accumulation_start_dateString = paste0('&accumulationStartDate=',accumulation_start_date)
-  
-  
-  
-  if (accumulation_start_date == '') {
-    address <- paste0(urlAddress, strBeg, strCoord, strType, strDates,
-                      gdd_methodString,gdd_base_tempString,gdd_min_boundaryString,gdd_max_boundaryString)
+
+  if (propertiesToInclude[1] != '') {
+    propertiesString <- paste0('&properties=',paste0(propertiesToInclude,collapse = ','))
   } else {
-    address <- paste0(urlAddress, strBeg, strCoord, strType, strDates,
-                      gdd_methodString,gdd_base_tempString,gdd_min_boundaryString,gdd_max_boundaryString,accumulation_start_dateString)
+    propertiesString <- ''
   }
-  
-  
-  
-  requestString <- paste0('request <- httr::GET(address,
-                          httr::add_headers(Authorization =
-                          paste0(\"Bearer \", awhereEnv75247$token)))')
-  
-  # Make request
-  
-  eval(parse(text = requestString))
-  
-  a <- suppressMessages(httr::content(request, as = "text"))
-  
+
+  url <- paste0(urlAddress, strBeg, strCoord, strType, strDates,
+                    gdd_methodString,gdd_base_tempString,gdd_min_boundaryString,
+                    gdd_max_boundaryString,strAccumulation,propertiesString)
+
+  doWeatherGet <- TRUE
+  while (doWeatherGet == TRUE) {
+    postbody = ''
+    request <- httr::GET(url, body = postbody, httr::content_type('application/json'),
+                         httr::add_headers(Authorization =paste0("Bearer ", tokenToUse)))
+
+    a <- suppressMessages(httr::content(request, as = "text"))
+
+    doWeatherGet <- check_JSON(a,request)
+  }
+
   #The JSONLITE Serializer properly handles the JSON conversion
-  
   x <- jsonlite::fromJSON(a,flatten = TRUE)
-  
-  if (grepl('API Access Expired',a)) {
-    get_token(awhereEnv75247$uid,awhereEnv75247$secret)
+
+  if (propertiesToInclude[1] != '' & any(grepl('accumulated',propertiesToInclude,fixed = TRUE)) == FALSE) {
+    data <- as.data.table(x[[1]])
+  } else if (propertiesToInclude[1] != '' & any(grepl('accumulated',propertiesToInclude,fixed = TRUE)) == TRUE) {
+    data <- as.data.table(x[[2]])
   } else {
-    doWeatherGet <- FALSE
+    data <- as.data.table(x[[3]])
   }
-  
-  
-  data <- x[[3]]
-  
-  
-  return(data)
-}
+
+  varNames <- colnames(data)
+  suppressWarnings(data[,grep('_links',varNames) := NULL])
+  suppressWarnings(data[,grep('.units',varNames) := NULL])
+
+  currentNames <- data.table::copy(colnames(data))
+  data[,field_id  := field_id]
+  data.table::setcolorder(data,c('field_id',currentNames))
+
+  checkDataReturn_daily(data,day_start,day_end)
+
+  return(as.data.frame(data))
+  }
 
 
 #' @title agronomic_values_latlng.
 #'
 #' @description
-#' \code{agronomic_values_latlng} calls Agronomic Values and Accumulations by Geolocation Endpoint of API using Lat/Lon
+#' \code{agronomic_values_latlng} pulls agronomic data from aWhere's API based on latitude & longitude
 #'
 #' @details
+#' This function returns agronomic data on GDDs, potential evapotranspiration (PET), Precipitation over
+#' potential evapotranspiration (P/PET), accumulated GDDs, accumulated precipitation, accumulated PET, and
+#' accumulated P/PET.  Default units are returned by the API.
+#'
 #' Agronomic Values are calculated numbers that can be used to show the agronomic status of a field or crop.
 #' These figures can be used, for example, to track and predict plant growth or identify water stress.
 #' Accumulated values allow growers to easily identify how the weather has been over the season.
 #' Both sets of data are commonly used on small and large farms alike.  This is a very flexible API
 #' that supports a wide variety of configurations to get exactly the data you want as efficiently as
-#' possible. This function used the Lat/Lon construct to request data.  This function returns GDDs, Pet,
-#' P/Pet, accumulated GDD, accumulated Precipitation, accumulated Pet, accumulated P/Pet.  Returns data
-#' in API default units (metric)
+#' possible.
 #'
-#' @references http://developer.awhere.com/api/reference/agronomics/values/geolocation
+#' Note about dates: The system does not adjust for any difference in dates between the location of the user
+#'           and where data is being requested from.  It is the responsibility of the user to ensure a valid
+#'           date range is specified given any differences in timezone.  These differences can have implications
+#'           for whether a given date should be requested from the daily_observed functions or the forecast functions
 #'
-#' @param - latitude: the latitude of the requested location
-#' @param - longitude: the longitude of the requested locations
-#' @param - day_start: character string of start date in form: YYYY-MM-DD
-#'                    Defaults to system date -1 if left blank
-#' @param - day_end: character string of end date in form: YYYY-MM-DD
-#'                  If Not included will return data only for start date
-#' @param - accumulation_start_date: If you want to start counting accumulations from
+#' @references http://developer.awhere.com/api/reference/agronomics/values
+#'
+#' @param - latitude: the latitude of the requested location (double)
+#' @param - longitude: the longitude of the requested locations (double)
+#' @param - day_start: character string of the first day for which you want to retrieve data, in the form: YYYY-MM-DD
+#' @param - day_end: character string of the last day for which you want to retrieve data, in the form: YYYY-MM-DD
+#' @param - propertiesToInclude: character vector of properties to retrieve from API.  Valid values are accumulations, gdd, pet, ppet, accumulatedGdd, accumulatedPrecipitation, accumulatedPet, accumulatedPpet (optional)
+#' @param - accumulation_start_date: Allows the user to start counting accumulations from
 #'                                 before the specified start date (or before the
-#'                                 planting date if using the most recent Planting),
-#'                                 use this parameter to specify the date from which
-#'                                 you wish to start counting. The daily values object
+#'                                 planting date if using the most recent planting).
+#'                                 Use this parameter to specify the date from which
+#'                                 you wish to start counting, in the form: YYYY-MM-DD.
+#'                                 The daily values object
 #'                                 will still only return the days between the start
-#'                                 and end date. This date must come before the start date.
+#'                                 and end date. This date must come before the start date. (optional)
 #' @param - gdd_method: There are variety of equations available for calculating growing degree-days.
 #'                     Valid entries are: 'standard', 'modifiedstandard', 'min-temp-cap', 'min-temp-constant'
 #'                     See the API documentation for a description of each method.  The standard
-#'                     method will be used if none is specified
+#'                     method will be used if none is specified. (character - optional)
 #' @param - gdd_base_temp: The base temp to use for the any of the GDD equations. The default value of 10 will
-#'                       be used if none is specified
+#'                       be used if none is specified. (optional)
 #' @param - gdd_min_boundary: The minimum boundary to use in the selected GDD equation.
 #'                           The behavior of this value is different depending on the equation you're using
-#'                           The default value of 10 will be used if none is specified
+#'                           The default value of 10 will be used if none is specified. (optional)
 #' @param - gdd_max_boundary: The max boundary to use in the selected GDD equation. The
 #'                          behavior of this value is different depending on the equation you're using.
-#'                          The default value of 30 will be used if none is specified
-#' @return data.table of requested data for dates requested
+#'                          The default value of 30 will be used if none is specified. (optional)
+#' @param - keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#'
+#' @import httr
+#' @import data.table
+#' @import lubridate
+#' @import jsonlite
+#'
+#' @return data.frame of requested data for dates requested
 #'
 #' @examples
-#' \dontrun{agronomic_values_latlng('39.8282', '-98.5795','2015-07-01','2015-07-31','','standard','10','10','30')}
+#' \dontrun{agronomic_values_latlng(latitude = 39.8282
+#'                                  ,longitude = -98.5795
+#'                                  ,day_start = '2018-05-01'
+#'                                  ,day_end = '2018-05-31')}
 #' @export
 
 
-agronomic_values_latlng <- function(latitude, longitude,
-                                    day_start = ymd(Sys.Date()) - days(1), day_end = '',
-                                    accumulation_start_date = '',gdd_method = 'standard',gdd_base_temp = '10',
-                                    gdd_min_boundary = '10', gdd_max_boundary = '30') {
-  
-  if (exists('awhereEnv75247') == FALSE) {
-    warning('Please Run the Command \'get_token()\' and then retry running command. \n')
-    return()
-  }
-  
-  if (exists('uid', envir = awhereEnv75247) == FALSE |
-      exists('secret', envir = awhereEnv75247) == FALSE |
-      exists('token', envir = awhereEnv75247) == FALSE) {
-    warning('Please Run the Command \'get_token()\' and then retry running command. \n')
-    return()
-  }
-  
-  if (suppressWarnings(is.na(as.double(latitude))) == FALSE) {
-    if ((as.double(latitude) >= -90 & as.double(latitude) <= 90) == FALSE) {
-      warning('The entered Latitude Value is not valid. Please correct\n')
-      return()
-    }
-  } else {
-    warning('The entered Latitude Value is not valid. Please correct\n')
-    return()
-  }
-  
-  if (suppressWarnings(is.na(as.double(longitude))) == FALSE) {
-    if ((as.double(longitude) >= -180 & as.double(longitude) <= 180) == FALSE) {
-      warning('The entered Longitude Value is not valid. Please correct\n')
-      return()
-    }
-  } else {
-    warning('The entered Longitude Value is not valid. Please correct\n')
-    return()
-  }
-  
-  if (suppressWarnings(is.na(ymd(day_start))) == TRUE) {
-    warning('The Start Date is Not Properly Formatted.  Please change to proper format. \n')
-    return()
-  }
-  
-  if ((day_end != '') == TRUE) {
-    if (suppressWarnings(is.na(ymd(day_end))) == TRUE) {
-      warning('The End Date is Not Properly Formatted.  Please change to proper format. \n')
-      return()
-    } else if (ymd(day_end) > ymd(Sys.Date()) - days(1)) {
-      warning('By default, this function can only be used to access data up until yesterday. \n
-              Use the GetForecast function to request data from today onward.\n')
-      return()
-    }
-  }
-  
-  if ((accumulation_start_date != '') == TRUE) {
-    if (suppressWarnings(is.na(ymd(accumulation_start_date))) == TRUE) {
-      warning('The Accumulation Start Date is Not Properly Formatted.  Please change to proper format. \n')
-      return()
-    }
-  }
-  
-  #  if (ymd(day_start) <= ymd(Sys.Date())-months(30)) {
-  #    warning('By default, the aWhere APIs only allow daily data from the previous 30 months. \n
-  #             Use the Norms API for long-term averages or speak to your account manager for longer access.\n')
-  #    return()
-  #  }
-  
-  if ((gdd_method %in% c('standard','modifiedstandard','min-temp-cap','min-temp-constant')) == FALSE) {
-    warning('Valid values for the GDD method used to calculate growing degree days are \n
-            \'standard\', \'modifiedstandard\', \'min-temp-cap\', \'min-temp-constant\'.\n
-            Please change gdd_method to one of these values. \n')
-    return()
-  }
-  
-  if (suppressWarnings(is.na(as.integer(gdd_base_temp))) == TRUE) {
-    warning('The gdd_base_temp parameter is not a valid value.  Please correct. \n')
-    return()
-  }
-  
-  if (suppressWarnings(is.na(as.integer(gdd_min_boundary))) == TRUE) {
-    warning('The gdd_min_boundary parameter is not a valid value.  Please correct. \n')
-    return()
-  }
-  
-  if (suppressWarnings(is.na(as.integer(gdd_max_boundary))) == TRUE) {
-    warning('The gdd_max_boundary parameter is not a valid value.  Please correct. \n')
-    return()
-  }
-  
-  ## Create Request
-  #Calculate number of loops needed if requesting more than 50 days
-  
-  
-  
+agronomic_values_latlng <- function(latitude
+                                    ,longitude
+                                    ,day_start
+                                    ,day_end
+                                    ,propertiesToInclude = ''
+                                    ,accumulation_start_date = ''
+                                    ,gdd_method = 'standard'
+                                    ,gdd_base_temp = 10
+                                    ,gdd_min_boundary = 10
+                                    ,gdd_max_boundary = 30
+                                    ,keyToUse = awhereEnv75247$uid
+                                    ,secretToUse = awhereEnv75247$secret
+                                    ,tokenToUse = awhereEnv75247$token) {
+
+  checkCredentials(keyToUse,secretToUse,tokenToUse)
+  checkValidLatLong(latitude,longitude)
+  checkValidStartEndDatesAgronomics(day_start,day_end)
+  checkGDDParams(gdd_method,gdd_base_temp,gdd_min_boundary,gdd_max_boundary)
+  checkAccumulationStartDate(accumulation_start_date)
+  checkPropertiesEndpoint('agronomics',propertiesToInclude)
+
   # Create query
-  
+
   urlAddress <- "https://api.awhere.com/v2/agronomics"
-  
+
   strBeg <- paste0('/locations')
   strCoord <- paste0('/',latitude,',',longitude)
   strType <- paste0('/agronomicvalues')
   strDates <- paste0('/',day_start,',',day_end)
-  
+
   gdd_methodString      <- paste0('?gddMethod=',gdd_method)
   gdd_base_tempString    <- paste0('&gddBaseTemp=',gdd_base_temp)
   gdd_min_boundaryString <- paste0('&gddMinBoundary=',gdd_min_boundary)
   gdd_max_boundaryString <- paste0('&gddMaxBoundary=',gdd_max_boundary)
-  
-  accumulation_start_dateString = paste0('&accumulationStartDate=',accumulation_start_date)
-  
-  
-  if (accumulation_start_date == '') {
-    address <- paste0(urlAddress, strBeg, strCoord, strType, strDates,
-                      gdd_methodString,gdd_base_tempString,gdd_min_boundaryString,gdd_max_boundaryString)
+
+  if (accumulation_start_date != '') {
+    strAccumulation <- paste0('&accumulationStartDate=',accumulation_start_date)
   } else {
-    address <- paste0(urlAddress, strBeg, strCoord, strType, strDates,
-                      gdd_methodString,gdd_base_tempString,gdd_min_boundaryString,gdd_max_boundaryString,accumulation_start_dateString)
+    strAccumulation <- ''
   }
-  
-  
-  
-  requestString <- paste0('request <- httr::GET(address,
-                          httr::add_headers(Authorization =
-                          paste0(\"Bearer \", awhereEnv75247$token)))')
-  
-  # Make request
-  
-  eval(parse(text = requestString))
-  
-  a <- suppressMessages(httr::content(request, as = "text"))
-  
+
+  if (propertiesToInclude[1] != '') {
+    propertiesString <- paste0('&properties=',paste0(propertiesToInclude,collapse = ','))
+  } else {
+    propertiesString <- ''
+  }
+
+  url <- paste0(urlAddress, strBeg, strCoord, strType, strDates,
+                    gdd_methodString,gdd_base_tempString,gdd_min_boundaryString,
+                    gdd_max_boundaryString,strAccumulation,propertiesString)
+
+  doWeatherGet <- TRUE
+  while (doWeatherGet == TRUE) {
+    postbody = ''
+    request <- httr::GET(url, body = postbody, httr::content_type('application/json'),
+                         httr::add_headers(Authorization =paste0("Bearer ", tokenToUse)))
+
+    a <- suppressMessages(httr::content(request, as = "text"))
+
+    doWeatherGet <- check_JSON(a,request)
+  }
+
   #The JSONLITE Serializer properly handles the JSON conversion
-  
   x <- jsonlite::fromJSON(a,flatten = TRUE)
-  
-  if (grepl('API Access Expired',a)) {
-    get_token(awhereEnv75247$uid,awhereEnv75247$secret)
+
+  if (propertiesToInclude[1] != '' & any(grepl('accumulated',propertiesToInclude,fixed = TRUE)) == FALSE) {
+    data <- as.data.table(x[[1]])
+  } else if (propertiesToInclude[1] != '' & any(grepl('accumulated',propertiesToInclude,fixed = TRUE)) == TRUE) {
+    data <- as.data.table(x[[2]])
   } else {
-    doWeatherGet <- FALSE
+    data <- as.data.table(x[[3]])
   }
-  
-  
-  data <- x[[3]]
-  
-  
-  return(data)
+
+  varNames <- colnames(data)
+  suppressWarnings(data[,grep('_links',varNames) := NULL])
+  suppressWarnings(data[,grep('.units',varNames) := NULL])
+
+  currentNames <- data.table::copy(colnames(data))
+  data[,latitude  := latitude]
+  data[,longitude := longitude]
+  data.table::setcolorder(data,c('latitude','longitude',currentNames))
+
+  checkDataReturn_daily(data,day_start,day_end)
+
+  return(as.data.frame(data))
 }
+
+#' @title agronomic_values_area
+#'
+#' @description
+#' \code{agronomic_values_area} pulls agronomic data from aWhere's API based on spatial polygon or extent
+#'
+#' @details
+#' This function returns agronomic data on GDDs, potential evapotranspiration (PET), Precipitation over
+#' potential evapotranspiration (P/PET), accumulated GDDs, accumulated precipitation, accumulated PET, and
+#' accumulated P/PET.  Default units are returned by the API.
+#'
+#' Agronomic Values are calculated numbers that can be used to show the agronomic status of a field or crop.
+#' These figures can be used, for example, to track and predict plant growth or identify water stress.
+#' Accumulated values allow growers to easily identify how the weather has been over the season.
+#' Both sets of data are commonly used on small and large farms alike.  This is a very flexible API
+#' that supports a wide variety of configurations to get exactly the data you want as efficiently as
+#' possible.
+#'
+#' The polygon should be either a SpatialPolygons object or a well-known text character string or an extent.
+#'
+#' Note about dates: The system does not adjust for any difference in dates between the location of the user
+#'           and where data is being requested from.  It is the responsibility of the user to ensure a valid
+#'           date range is specified given any differences in timezone.  These differences can have implications
+#'           for whether a given date should be requested from the daily_observed functions or the forecast functions.
+#'           Furthermore, because this function can take as input locations that may be in different timezones, it is
+#'           the responsibility of the user to either ensure that the date range specified is valid for all relevant
+#'           locations or to break the query into pieces.
+#'
+#' @references http://developer.awhere.com/api/reference/weather/observations/geolocation
+#'
+#' @param - polygon: either a SpatialPolygons object, well-known text string, or extent from raster package
+#' @param - day_start: character string of the first day for which you want to retrieve data, in the form: YYYY-MM-DD
+#' @param - day_end: character string of the last day for which you want to retrieve data, in the form: YYYY-MM-DD
+#' @param - propertiesToInclude: character vector of properties to retrieve from API.  Valid values are accumulations, gdd, pet, ppet, accumulatedGdd, accumulatedPrecipitation, accumulatedPet, accumulatedPpet (optional)
+#' @param - accumulation_start_date: Allows the user to start counting accumulations from
+#'                                 before the specified start date (or before the
+#'                                 planting date if using the most recent planting).
+#'                                 Use this parameter to specify the date from which
+#'                                 you wish to start counting, in the form: YYYY-MM-DD.
+#'                                 The daily values object
+#'                                 will still only return the days between the start
+#'                                 and end date. This date must come before the start date. (optional)
+#' @param - gdd_method: There are variety of equations available for calculating growing degree-days.
+#'                     Valid entries are: 'standard', 'modifiedstandard', 'min-temp-cap', 'min-temp-constant'
+#'                     See the API documentation for a description of each method.  The standard
+#'                     method will be used if none is specified. (character - optional)
+#' @param - gdd_base_temp: The base temp to use for the any of the GDD equations. The default value of 10 will
+#'                       be used if none is specified. (optional)
+#' @param - gdd_min_boundary: The minimum boundary to use in the selected GDD equation.
+#'                           The behavior of this value is different depending on the equation you're using
+#'                           The default value of 10 will be used if none is specified. (optional)
+#' @param - gdd_max_boundary: The max boundary to use in the selected GDD equation. The
+#'                          behavior of this value is different depending on the equation you're using.
+#'                          The default value of 30 will be used if none is specified. (optional)#' @param - numcores: number of cores to use in parallel loop. To check number of available cores: parallel::detectCores()
+#'                    If you receive an error regarding the speed you are making calls, reduce this number
+#' @param - bypassNumCallCheck: set to TRUE to avoid prompting the user to confirm that they want to begin making API calls
+#' @param - keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#'
+#' @import httr
+#' @import data.table
+#' @import lubridate
+#' @import jsonlite
+#' @import foreach
+#' @import doParallel
+#' @import rgeos
+#'
+#' @return data.frame of requested data for dates requested
+#'
+#'
+#' @examples
+#' \dontrun{agronomic_values_area(polygon = raster::getData('GADM', country = "Gambia", level = 0, download = T),
+#'                                ,day_start = '2018-04-28'
+#'                                ,day_end = '2018-05-01'
+#'                                ,numcores = 2)}
+
+#' @export
+
+
+agronomic_values_area <- function(polygon
+                                ,day_start
+                                ,day_end
+                                ,propertiesToInclude = ''
+                                ,accumulation_start_date = ''
+                                ,gdd_method = 'standard'
+                                ,gdd_base_temp = 10
+                                ,gdd_min_boundary = 10
+                                ,gdd_max_boundary = 30
+                                ,numcores = 2
+                                ,bypassNumCallCheck = FALSE
+                                ,keyToUse = awhereEnv75247$uid
+                                ,secretToUse = awhereEnv75247$secret
+                                ,tokenToUse = awhereEnv75247$token) {
+
+  checkCredentials(keyToUse,secretToUse,tokenToUse)
+  checkValidStartEndDatesAgronomics(day_start,day_end)
+  checkGDDParams(gdd_method,gdd_base_temp,gdd_min_boundary,gdd_max_boundary)
+  checkAccumulationStartDate(accumulation_start_date)
+  checkPropertiesEndpoint('agronomics',propertiesToInclude)
+
+  cat(paste0('Creating aWhere Raster Grid within Polygon\n'))
+  grid <- create_awhere_grid(polygon)
+
+  verify_api_calls(grid,bypassNumCallCheck)
+
+  cat(paste0('Requesting data using parallal API calls\n'))
+  doParallel::registerDoParallel(cores=numcores)
+
+  observed <- foreach::foreach(j=c(1:nrow(grid)), .packages = c("aWhereAPI")) %dopar% {
+
+    t <- agronomic_values_latlng(latitude = grid$lat[j]
+                                 ,longitude = grid$lon[j]
+                                 ,day_start = day_start
+                                 ,day_end = day_end
+                                 ,propertiesToInclude = propertiesToInclude
+                                 ,keyToUse = keyToUse
+                                 ,secretToUse = secretToUse
+                                 ,tokenToUse = tokenToUse)
+
+    currentNames <- colnames(t)
+
+    t$gridy <- grid$gridy[j]
+    t$gridx <- grid$gridx[j]
+
+    data.table::setcolorder(t, c(currentNames[c(1:2)], "gridy", "gridx", currentNames[c(3:length(currentNames))]))
+
+    return(t)
+
+  }
+
+  observed <- data.table::rbindlist(observed)
+  return(as.data.frame(observed))
+}
+
 

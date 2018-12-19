@@ -5,31 +5,43 @@
 #'
 #' @details
 #' Fields are how you manage the locations for which you're tracking weather, agronomics,
-#' models, and progress over growing seasons. By registering a field, you create a quick way
-#' to consistently reference locations across all our APIs, and allow our modeling APIs
-#' to better operate and tune to the conditions and status of each specific field. A Planting
-#' is the record of a crop's season in a given field, and is where you tell the platform
-#' about what is planted there and when it was planted.
+#' models, and progress over growing seasons in the aWhere API. By registering a field, you create a quick way
+#' to consistently reference locations across all of our APIs, and allow our modeling APIs
+#' to better operate and tune to the conditions and status of each specific field.
 #'
-#' Before using our other APIs you'll need to register the field locations if using the Fields Name construct.
+#' Before using aWhere's APIs you'll need to register the field locations.
 #' This is a one-time step. Every field has an ID that you define, plus a latitude and longitude.
-#' Fields are universal across all our APIs, and as you provide information about a field, some APIs
+#' Fields are universal across all of our APIs, and as you provide information about a field, some APIs
 #' (such as agronomics and models) can leverage that detail internally to more easily and seamlessly
 #' calculate information for you.
 #'
 #' @references http://developer.awhere.com/api/reference/fields/get-fields
 #'
-#' @param - field_id: Either a specified field name (as a string) to retrieve info on only that field
-#'                   or an empty string to retrieve info on all fields
+#' @param - field_id: Either a field id to retrieve information for that specific field
+#'                   or an empty string to retrieve information on all fields associated
+#'                   with the user's aWhere API account (string - optional)
+#' @param - keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)
 #'
-#' @return - data: data.table containing information about requested field(s)
+#' @import httr
+#'
+#' @return - data.frame containing information about requested field(s)
 #'
 #' @examples
-#' \dontrun{get_fields('field1')}
+#' \dontrun{get_fields('field_test')
+#'          get_fields()
+#' }
 
 #' @export
 
-get_fields <- function(field_id = "") {
+get_fields <- function(field_id = ''
+                       ,keyToUse = awhereEnv75247$uid
+                       ,secretToUse = awhereEnv75247$secret
+                       ,tokenToUse = awhereEnv75247$token) {
+
+  checkCredentials(keyToUse,secretToUse,tokenToUse)
+
   ## Create Request
   url <- "https://api.awhere.com/v2/fields/"
 
@@ -39,25 +51,17 @@ get_fields <- function(field_id = "") {
 
   doWeatherGet <- TRUE
   while (doWeatherGet == TRUE) {
-    ## Get data
     request <- httr::GET(url,
                          httr::content_type('application/json'),
                          httr::add_headers(Authorization =
-                                 paste0("Bearer ", awhereEnv75247$token)))
+                                 paste0("Bearer ", tokenToUse)))
 
     a <- suppressMessages(httr::content(request))
 
-    # The JSONLITE Serializer propely handles the JSON conversion
-
-    if (any(grepl('API Access Expired',a)) == TRUE) {
-      get_token(awhereEnv75247$uid,awhereEnv75247$secret)
-    } else {
-      doWeatherGet <- FALSE
-    }
+    doWeatherGet <- check_JSON(a,request)
   }
 
   ## Create & fill data frame
-
   if(field_id == "") {
     data <- as.data.frame(do.call(rbind, lapply(a$fields, rbind)))[, c(1:5)]
     data <- cbind(data, do.call(rbind, lapply(data$centerPoint, rbind)))
@@ -105,26 +109,40 @@ get_fields <- function(field_id = "") {
 #' and agronomics for that location in all the other APIs.
 #'
 #' @param - field_id: a field ID to look within (string)
-#' @param - planting_id: a planting ID to look for (string)
+#' @param - planting_id: a planting ID to look for (string - optional)
 #' @param - current: whether to just get current plantings(T) or include historical plantings(F).
-#'                   To get most recent planting record for a field, set current to TRUE and do not pass in a planting_id (boolean)
-#' @param - offset: The number of objects to skip before returning objects. Used in conjunction with offset to paginate.
-#' @param - limit: The number of results to include on each of page of listed fields. Used in conjunction with offset to paginate.
+#'                   To get most recent planting record for a field, set current to TRUE and do not pass in a planting_id (boolean - optional)
+#' @param - offset: The number of objects to skip before returning objects. Used in conjunction with offset to paginate. (optional)
+#' @param - limit: The number of results to include on each of page of listed fields. Used in conjunction with offset to paginate. (optional)
+#' @param - keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)
 #'
-#' @return - data: data.table containing information about requested field(s)
+#' @return - data.frame containing information about requested field(s)
+#'
+#' @import httr
 #'
 #' @references http://developer.awhere.com/api/reference/plantings/get-plantings
 #'
 #'
 #' @examples
-#' \dontrun{get_planting(field_id='field1')
-#' get_planting(field_id = 'field1', planting_id = '73227')
-#' get_planting('field1', current = T)
-#' get_planting(field_id='field1', offset = '0', limit = '5')}
+#' \dontrun{get_planting(field_id='field_test')
+#' get_planting(field_id = 'field_test', planting_id = '156035')
+#' get_planting('field_test', current = T)
+#' get_planting(field_id='field_test', offset = '0', limit = '5')}
 #' @export
 
-get_planting <- function(field_id = "", planting_id = "", current = F, offset="", limit="") {
+get_planting <- function(field_id
+                         ,planting_id = ''
+                         ,current = F
+                         ,offset=""
+                         ,limit=""
+                         ,keyToUse = awhereEnv75247$uid
+                         ,secretToUse = awhereEnv75247$secret
+                         ,tokenToUse = awhereEnv75247$token) {
 
+  checkCredentials(keyToUse,secretToUse,tokenToUse)
+  checkValidField(field_id,keyToUse,secretToUse,tokenToUse)
 
   ## Create Request
   url <- "https://api.awhere.com/v2/agronomics/"
@@ -157,18 +175,12 @@ get_planting <- function(field_id = "", planting_id = "", current = F, offset=""
     request <- httr::GET(url,
                          httr::content_type('application/json'),
                          httr::add_headers(Authorization =
-                                 paste0("Bearer ", awhereEnv75247$token)))
+                                 paste0("Bearer ", tokenToUse)))
 
     a <- suppressMessages(httr::content(request))
 
-    if (any(grepl('API Access Expired',a))) {
-      get_token(awhereEnv75247$uid,awhereEnv75247$secret)
-    } else {
-      doWeatherGet <- FALSE
-    }
+    doWeatherGet <- check_JSON(a,request)
   }
-
-  ## Get data
 
   ## Create & fill data frame
   if(is.null(a$statusCode)) {
@@ -219,15 +231,20 @@ get_planting <- function(field_id = "", planting_id = "", current = F, offset=""
 #' @title Get Job
 #'
 #' @description
-#' \code{get_planting} Gets a job's results when complete.
+#' \code{get_job} Gets a job's results when complete.
 #'
 #' @details
 #' Once a batch job is queued you can check on its status with this API. If the job is complete and results are available, they will be included in the response body.
 #'
 #' @param - job_id: a job ID assigned by an aWhere create job.
 #' @param - wait: wait for job to complete before returning
+#' @param - keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)
 #'
-#' @return - data: data.table containing the requested payload(s).
+#' @return - data.frame containing the requested payload(s).
+#'
+#' @import httr
 #'
 #' @references https://developer.awhere.com/api/reference/batch/status-results
 #'
@@ -236,7 +253,16 @@ get_planting <- function(field_id = "", planting_id = "", current = F, offset=""
 
 #' @export
 
-get_job <- function(job_id, wait=T, retry_secs=60, num_retries=60) {
+get_job <- function(job_id
+                    ,wait = TRUE
+                    ,retry_secs = 60
+                    ,num_retries = 60
+                    ,keyToUse = awhereEnv75247$uid
+                    ,secretToUse = awhereEnv75247$secret
+                    ,tokenToUse = awhereEnv75247$token) {
+
+  checkCredentials(keyToUse,secretToUse,tokenToUse)
+
   ## Create Request
   url <- "https://api.awhere.com/v2/jobs/"
 
@@ -251,12 +277,21 @@ get_job <- function(job_id, wait=T, retry_secs=60, num_retries=60) {
   while (doWeatherGet == TRUE) {
     request <- httr::GET(url,
                          httr::content_type('application/json'),
-                         httr::add_headers(Authorization = paste0("Bearer ", awhereEnv75247$token)))
+                         httr::add_headers(Authorization = paste0("Bearer ", tokenToUse)))
 
     a <- suppressMessages(httr::content(request))
 
-    if (any(grepl('API Access Expired', a))) {
-      get_token(awhereEnv75247$uid,awhereEnv75247$secret)
+    if (any(grepl('API Access Expired',a))) {
+      if(exists("awhereEnv75247")) {
+        if(tokenToUse == awhereEnv75247$token) {
+          get_token(keyToUse,secretToUse)
+          tokenToUse <- awhereEnv75247$token
+        } else {
+          stop("The token you passed in has expired. Please request a new one and retry your function call with the new token.")
+        }
+      } else {
+        stop("The token you passed in has expired. Please request a new one and retry your function call with the new token.")
+      }
     } else if (a$jobStatus == "Done") {
       doWeatherGet <- FALSE
     } else if (retries >= num_retries) {

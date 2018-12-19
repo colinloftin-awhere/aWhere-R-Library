@@ -2,49 +2,77 @@
 % Please edit documentation in R/weather-norms.R
 \name{weather_norms_fields}
 \alias{weather_norms_fields}
-\title{weather_norms_fields.}
+\title{weather_norms_fields}
 \usage{
-weather_norms_fields(field_id, monthday_start = "", monthday_end = "",
-  year_start = "", year_end = "", exclude_years = "")
+weather_norms_fields(field_id, monthday_start, monthday_end, year_start,
+  year_end, propertiesToInclude = "", exclude_years = NULL,
+  includeFeb29thData = TRUE, keyToUse = awhereEnv75247$uid,
+  secretToUse = awhereEnv75247$secret,
+  tokenToUse = awhereEnv75247$token)
 }
 \arguments{
-\item{-}{field_id: the field_id having previously been created with the createField Function}
+\item{-}{field_id: the field_id associated with the location for which you want to pull data.
+Field IDs are created using the create_field function. (string)}
 
-\item{-}{monthday_start: required, character string of the month and day for the start
-of the range of days you are calculating norms for, e.g., '07-01' (July 1)}
+\item{-}{monthday_start: character string of the first month and day for which you want to retrieve data,
+in the form: MM-DD.  This is the start of your date range. e.g. '07-01' (July 1) (required)}
 
-\item{-}{monthday_end: required, character string of the month and day for the end of the
-range of days you are calculating norms for, e.g., '07-10' (July 10)}
+\item{-}{monthday_end: character string of the last month and day for which you want to retrieve data,
+in the form: MM-DD.  This is the end of your date range. e.g. '07-01' (July 1) (required)}
 
-\item{-}{year_start: the starting year (inclusive) of the range of years for which
-you're calculating norms, as a string, e.g., '2008'}
+\item{-}{year_start: character string of the starting year (inclusive) of the range of years for which
+you're calculating norms, in the form YYYY. e.g., 2008 (required)}
 
-\item{-}{year_start: the end year (inclusive) of the range of years for which you're
-calculating norms, as a string, e.g., '2015'}
+\item{-}{year_end: character string of the last year (inclusive) of the range of years for which
+you're calculating norms, in the form YYYY. e.g., 2015 (required)}
 
-\item{-}{exclude_year: You can opt to exclude one or more years from the range, and
-  it's values will not be included in the averages. To exclude
- multiple years, separate them with a comma. Note: You must always have
-at least three years of data to average}
+\item{-}{propertiesToInclude: character vector of properties to retrieve from API.  Valid values are meanTemp, maxTemp, minTemp, precipitation, solar, maxHumidity, minHumidity, dailyMaxWind (optional)}
+
+\item{-}{exclude_year: Year or years which you'd like to exclude from
+ your range of years on which to calculate norms. To exclude
+ multiple years, provide a vector of years. You must include
+at least three years of data with which to calculate the norms. (numeric, optional)}
+
+\item{-}{includeFeb29thData: Whether to keep data from Feb 29th on leap years.  Because weather/agronomics
+summary statistics are calculated via the calendar date and 3 years are required
+to generate a value, data from this date is more likely to be NA.  ALlows user
+to drop this data to avoid later problems (defaults to TRUE)}
+
+\item{-}{keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
 }
 \value{
-data.table of requested data for dates requested
+dataframe of requested data for dates requested
 }
 \description{
-\code{weather_norms_fields} calls Historic Weather Norms Endpoint of API using Field Location Construct
+\code{weather_norms_fields} pulls long term norm weather data from aWhere's API based on field id
 }
 \details{
-This is a flexible API that allows you to calculate the averages for weather attribute
-across any range of years for which we have data. Whereas the Daily Observed API only
-supports up to 30 months of daily data, this API allow you to compare this year and
-the previous year to the long-term normals (however many years you want to include).
-Each day's worth of data also includes the standard deviation for the average.
+This function allows you to calculate the averages for weather attributes
+across any range of years for which data are available.  The data pulled includes
+meanTemp, maxTemp, minTemp, precipitation average, solar radiation average,
+minHumidity, maxHumidity, maxWind and averageWind, along with the standard deviations
+for these variables.  The data pulled is for the field id identified.
+
+The data returned in this function
+allow you to compare this year or previous years to the long-term normals, calculated as
+the average of those weather conditions on that day in that location over the years specified.
+
+Note about dates: The system does not adjust for any difference in dates between the location of the user
+          and where data is being requested from.  It is the responsibility of the user to ensure a valid
+          date range is specified given any differences in timezone.  These differences can have implications
+          for whether a given date should be requested from the daily_observed functions or the forecast functions
 }
 \examples{
-\dontrun{weather_norms_fields('field123', monthday_start = '07-01', monthday_end = '07-10',
-year_start = '2008', year_end = '2015', exclude_years = '2009,2013')}
+\dontrun{weather_norms_fields(field_id = "field_test"
+                              ,monthday_start = "06-01"
+                              ,monthday_end = "09-01"
+                              ,year_start = 2006
+                              ,year_end = 2015)}
 }
 \references{
 http://developer.awhere.com/api/reference/weather/norms
 }
-

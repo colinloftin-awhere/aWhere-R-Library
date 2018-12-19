@@ -4,18 +4,26 @@
 \alias{get_job}
 \title{Get Job}
 \usage{
-get_job(job_id, wait = T, retry_secs = 60, num_retries = 60)
+get_job(job_id, wait = TRUE, retry_secs = 60, num_retries = 60,
+  keyToUse = awhereEnv75247$uid, secretToUse = awhereEnv75247$secret,
+  tokenToUse = awhereEnv75247$token)
 }
 \arguments{
 \item{-}{job_id: a job ID assigned by an aWhere create job.}
 
 \item{-}{wait: wait for job to complete before returning}
+
+\item{-}{keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
 }
 \value{
-- data: data.table containing the requested payload(s).
+- data.frame containing the requested payload(s).
 }
 \description{
-\code{get_planting} Gets a job's results when complete.
+\code{get_job} Gets a job's results when complete.
 }
 \details{
 Once a batch job is queued you can check on its status with this API. If the job is complete and results are available, they will be included in the response body.
@@ -26,4 +34,3 @@ Once a batch job is queued you can check on its status with this API. If the job
 \references{
 https://developer.awhere.com/api/reference/batch/status-results
 }
-

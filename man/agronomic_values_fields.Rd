@@ -2,65 +2,90 @@
 % Please edit documentation in R/agronomic-values.R
 \name{agronomic_values_fields}
 \alias{agronomic_values_fields}
-\title{Get Agronomic Values Fields.}
+\title{agronomic_values_fields}
 \usage{
-agronomic_values_fields(field_id, day_start = "", day_end = "",
-  accumulation_start_date = "", gdd_method = "standard",
-  gdd_base_temp = "10", gdd_min_boundary = "10", gdd_max_boundary = "30")
+agronomic_values_fields(field_id, day_start, day_end,
+  propertiesToInclude = "", accumulation_start_date = "",
+  gdd_method = "standard", gdd_base_temp = 10, gdd_min_boundary = 10,
+  gdd_max_boundary = 30, keyToUse = awhereEnv75247$uid,
+  secretToUse = awhereEnv75247$secret,
+  tokenToUse = awhereEnv75247$token)
 }
 \arguments{
-\item{-}{field_id: the field_id having previously been created with the createField Function}
+\item{-}{field_id: the field_id associated with the location for which you want to pull data.
+Field IDs are created using the create_field function. (string)}
 
-\item{-}{day_start: required, character string of start date in form: YYYY-MM-DD}
+\item{-}{day_start: character string of the first day for which you want to retrieve data, in the form: YYYY-MM-DD}
 
-\item{-}{day_end: required, character string of end date in form: YYYY-MM-DD}
+\item{-}{day_end: character string of the last day for which you want to retrieve data, in the form: YYYY-MM-DD}
 
-\item{-}{accumulation_start_date: If you want to start counting accumulations from
+\item{-}{propertiesToInclude: character vector of properties to retrieve from API.  Valid values are accumulations, gdd, pet, ppet, accumulatedGdd, accumulatedPrecipitation, accumulatedPet, accumulatedPpet (optional)}
+
+\item{-}{accumulation_start_date: Allows the user to start counting accumulations from
 before the specified start date (or before the
-planting date if using the most recent Planting),
-use this parameter to specify the date from which
-you wish to start counting. The daily values object
+planting date if using the most recent planting).
+Use this parameter to specify the date from which
+you wish to start counting, in the form: YYYY-MM-DD.
+The daily values object
 will still only return the days between the start
-and end date. This date must come before the start date.}
+and end date. This date must come before the start date. (optional)}
 
 \item{-}{gdd_method: There are variety of equations available for calculating growing degree-days.
 Valid entries are: 'standard', 'modifiedstandard', 'min-temp-cap', 'min-temp-constant'
 See the API documentation for a description of each method.  The standard
-method will be used if none is specified}
+method will be used if none is specified. (character - optional)}
 
 \item{-}{gdd_base_temp: The base temp to use for the any of the GDD equations. The default value of 10 will
-be used if none is specified}
+be used if none is specified. (optional)}
 
 \item{-}{gdd_min_boundary: The minimum boundary to use in the selected GDD equation.
 The behavior of this value is different depending on the equation you're using
-The default value of 10 will be used if none is specified}
+The default value of 10 will be used if none is specified. (optional)}
 
 \item{-}{gdd_max_boundary: The max boundary to use in the selected GDD equation. The
 behavior of this value is different depending on the equation you're using.
-The default value of 30 will be used if none is specified}
+The default value of 30 will be used if none is specified. (optional)}
+
+\item{-}{keyToUse: aWhere API uid to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
 }
 \value{
-data.table of requested data for dates requested
+dataframe of requested data for dates requested
 }
 \description{
-\code{agronomic_values_fields} calls Agronomic Values and Accumulations Endpoint of API using Field Location Construct
+\code{agronomic_values_fields} pulls agronomic data from aWhere's API based on field id
 }
 \details{
+This function returns agronomic data on growing degree days (GDDs), potential evapotranspiration (PET), Precipitation over
+potential evapotranspiration (P/PET), accumulated GDDs, accumulated precipitation, accumulated PET, and
+accumulated P/PET.  Default units are returned by the API.
+
 Agronomic Values are calculated numbers that can be used to show the agronomic status of a field or crop.
 These figures can be used, for example, to track and predict plant growth or identify water stress.
 Accumulated values allow growers to easily identify how the weather has been over the season.
 Both sets of data are commonly used on small and large farms alike.  This is a very flexible API
 that supports a wide variety of configurations to get exactly the data you want as efficiently as
 possible. It's also designed to work with the Fields and Plantings system to reduce the amount of input.
-While a planting is not required to use this API, be sure to create Plantings for your Fields in order
-to get the most out of the aWhere platform.  This function returns GDDs, Pet, P/Pet, accumulated GDD,
-accumulated Precipitation, accumulated Pet, accumulated P/Pet.  Returns data in API default units (metric)
+While a planting is not required to use this API, creating a Planting for your Fields will allow you
+to get the most out of the aWhere platform.
+
+Note about dates: The system does not adjust for any difference in dates between the location of the user
+          and where data is being requested from.  It is the responsibility of the user to ensure a valid
+          date range is specified given any differences in timezone.  These differences can have implications
+          for whether a given date should be requested from the daily_observed functions or the forecast functions
 }
 \examples{
-\dontrun{agronomic_values_fields('field123','2015-07-01','2015-07-31','','standard','10','10','30')
-agronomic_values_fields("field123", day_start = "2016-07-01", day_end = "2016-07-31", accumulation_start_date = "2016-06-01", gdd_method = "modifiedstandard", gdd_base_temp = "10", gdd_min_boundary = "10", gdd_max_boundary = "30")}
+\dontrun{agronomic_values_fields(field_id = "field_test"
+                                 ,day_start = "2018-05-01"
+                                 ,day_end = "2018-05-31"
+                                 ,gdd_method = "modifiedstandard"
+                                 ,gdd_base_temp = 10
+                                 ,gdd_min_boundary = 10
+                                 ,gdd_max_boundary = 30)}
 }
 \references{
 http://developer.awhere.com/api/reference/agronomics/values
 }
-

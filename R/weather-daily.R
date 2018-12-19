@@ -1,99 +1,73 @@
-#' @title daily_observed_fields.
+#' @title daily_observed_fields
 #'
 #' @description
-#' \code{daily_observed_fields} calls Daily Observed Weather Endpoint of API using Field Location Construct
+#' \code{daily_observed_fields} pulls historical weather data from aWhere's API based on field id
 #'
 #' @details
-#' The Weather APIs provide access to aWhere's agriculture-specific Weather Terrain™ system,
-#' and allows retrieval and integration of data across all different time ranges—long term normals,
+#' This function returns weather data on Min/Max Temperature, Precipitation,
+#' Min/Max Humidity, Solar Radiation, and Maximum Wind Speed,
+#' Morning Max Windspeed, and Average Windspeed for the field id specified.
+#' Default units are returned by the API.
+#'
+#' The Weather APIs provide access to aWhere's agriculture-specific Weather Terrain system,
+#' and allows retrieval and integration of data across all different time ranges, long term normals,
 #' daily observed, current weather, and forecasts. These APIs are designed for efficiency,
 #' allowing you to customize the responses to return just the attributes you need.
 #'
 #' Understanding the recent and long-term daily weather is critical for making in-season decisions.
-#' This API opens the weather attributes that matter most to agriculture. By default you are allowed
-#' access of up to 30 months of data (beyond that, use the Norms API to get multi-year averages).
-#' This function assumes that the data to be requested is Min/Max Temperature, Precipitation,
-#' Min/Max Humidity, Solar Radiation, and Maximum Wind Speed,
-#' Morning Max Windspeed, and Average Windspeed.  Uses the Fields Name construct for requesting data.
-#' Uses default units returned by the API
+#' This API opens the weather attributes that matter most to agriculture.
+#'
+#' Note about dates: The system does not adjust for any difference in dates between the location of the user
+#'           and where data is being requested from.  It is the responsibility of the user to ensure a valid
+#'           date range is specified given any differences in timezone.  These differences can have implications
+#'           for whether a given date should be requested from the daily_observed functions or the forecast functions
 #'
 #' @references http://developer.awhere.com/api/reference/weather/observations
 #'
-#' @param - latitude: the latitude of the requested location
-#' @param - longitude: the longitude of the requested locations
-#' @param - day_start: character string of start date in form: YYYY-MM-DD
-#'                    Defaults to system date -1 if left blank
-#' @param - day_end: character string of end date in form: YYYY-MM-DD
-#'                  If Not included will return data only for start date
-#' @return data.table of requested data for dates requested
+#' @param - field_id: the field_id associated with the location for which you want to pull data.
+#' Field IDs are created using the create_field function.(string)
+#' @param - day_start: character string of the first day for which you want to retrieve data, in the form: YYYY-MM-DD.
+#' @param - day_end: character string of the last day for which you want to retrieve data, in form: YYYY-MM-DD
+#' @param - propertiesToInclude: character vector of properties to retrieve from API.  Valid values are temperatures, precipitation, solar, relativeHumidity, wind (optional)
+#' @param - keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#'
+#' @import httr
+#' @import data.table
+#' @import lubridate
+#' @import jsonlite
+#'
+#' @return data.frame of requested data for dates requested
 #'
 #'
 #' @examples
-#' \dontrun{daily_observed_fields('field123','2014-04-28','2015-05-01')}
+#' \dontrun{daily_observed_fields(field_id = 'field_test'
+#'                                ,day_start = '2018-04-28'
+#'                                ,day_end = '2018-05-01')}
 
 #' @export
-daily_observed_fields <- function(field_id, day_start = '', day_end = '') {
+daily_observed_fields <- function(field_id
+                                  ,day_start
+                                  ,day_end
+                                  ,propertiesToInclude = ''
+                                  ,keyToUse = awhereEnv75247$uid
+                                  ,secretToUse = awhereEnv75247$secret
+                                  ,tokenToUse = awhereEnv75247$token) {
 
-  if (exists('awhereEnv75247') == FALSE) {
-    warning('Please Run the Command \'get_token()\' and then retry running command. \n')
-    return()
-  }
+  checkCredentials(keyToUse,secretToUse,tokenToUse)
+  checkValidField(field_id,keyToUse,secretToUse,tokenToUse)
+  checkValidStartEndDates(day_start,day_end)
+  checkPropertiesEndpoint('weather',propertiesToInclude)
 
-  if (exists('uid', envir = awhereEnv75247) == FALSE |
-      exists('secret', envir = awhereEnv75247) == FALSE |
-      exists('token', envir = awhereEnv75247) == FALSE) {
-    warning('Please Run the Command \'get_token()\' and then retry running command. \n')
-    return()
-  }
-
-  if (day_start == '' & day_end != '') {
-    warning('If day_end is specified so must day_start.  Please correct \n')
-    return()
-  }
-
-  currentFields <- get_fields(field_id)
-  if ((field_id %in% currentFields$field_id) == FALSE) {
-    warning('The Provided field name is not a field currently associated with your account. \n
-            Please create the field before proceeding. \n')
-    return()
-  }
-
-  if (day_start != '') {
-    if (suppressWarnings(is.na(ymd(day_start))) == TRUE) {
-      warning('The Start Date is Not Properly Formatted.  Please change to proper format. \n')
-      return()
-    } #else if (ymd(day_start) <= ymd(Sys.Date())-months(30)) {
-    #warning('By default, the aWhere APIs only allow daily data from the previous 30 months. \n
-    #       Use the Norms API for long-term averages or speak to your account manager for longer access.\n')
-    #return()
-    # }
-  }
-
-  if ((day_end != '') == TRUE) {
-    if (suppressWarnings(is.na(ymd(day_end))) == TRUE) {
-      warning('The End Date is Not Properly Formatted.  Please change to proper format. \n')
-      return()
-    } else if (ymd(day_end) > ymd(Sys.Date()) - days(1)) {
-      warning('By default, this function can only be used to access data up until yesterday. \n
-              Use the GetForecast function to request data from today onward.\n')
-      return()
-    }
-  }
-
-  if (day_start !='' & day_end != '') {
-    if (ymd(day_start) > ymd(day_end)) {
-      warning('The endDate must come after the startDate. Please correct\n')
-      return()
-    }
-  }
 
   ## Create Request
-  #Calculate number of loops needed if requesting more than 50 days
-  numObsReturned <- 50
+  #Calculate number of loops needed if requesting more than 120 days
+  numObsReturned <- 120
 
   if (day_start != '' & day_end != '') {
-    numOfDays <- as.numeric(difftime(ymd(day_end), ymd(day_start), units = 'days'))
-    allDates <- seq(as.Date(ymd(day_start)),as.Date(ymd(day_end)), by="days")
+    numOfDays <- as.numeric(difftime(lubridate::ymd(day_end), lubridate::ymd(day_start), units = 'days'))
+    allDates <- seq(as.Date(lubridate::ymd(day_start)),as.Date(lubridate::ymd(day_end)), by="days")
 
     loops <- ((length(allDates))) %/% numObsReturned
     remainder <- ((length(allDates))) %% numObsReturned
@@ -101,7 +75,7 @@ daily_observed_fields <- function(field_id, day_start = '', day_end = '') {
   } else if (day_start != '') {
 
     numOfDays <- 1
-    allDates <- ymd(day_start)
+    allDates <- lubridate::ymd(day_start)
     loops <- 1
     remainder <- 0
   } else {
@@ -118,7 +92,7 @@ daily_observed_fields <- function(field_id, day_start = '', day_end = '') {
 
   dataList <- list()
 
-  # loop through, making requests in 50-day chunks
+  # loop through, making requests in chunks of size numObsReturned
 
   for (i in 1:loops) {
 
@@ -126,12 +100,12 @@ daily_observed_fields <- function(field_id, day_start = '', day_end = '') {
     ending = numObsReturned*i
 
     if(paste(allDates,sep = '',collapse ='') != '') {
-      day_start <- allDates[starting]
-      day_end <- allDates[ending]
-      if(is.na(day_end)) {
+      day_start_toUse <- allDates[starting]
+      day_end_toUse <- allDates[ending]
+      if(is.na(day_end_toUse)) {
         tempDates <- allDates[c(starting:length(allDates))]
-        day_start <- tempDates[1]
-        day_end <- tempDates[length(tempDates)]
+        day_start_toUse <- tempDates[1]
+        day_end_toUse <- tempDates[length(tempDates)]
       }
     }
 
@@ -145,9 +119,9 @@ daily_observed_fields <- function(field_id, day_start = '', day_end = '') {
     strType <- paste0('/observations')
 
     if(paste(allDates,sep = '',collapse ='') != '') {
-      strDates <- paste0('/',day_start,',',day_end)
+      strDates <- paste0('/',day_start_toUse,',',day_end_toUse)
 
-      returnedAmount <- as.integer(difftime(ymd(day_end),ymd(day_start),units = 'days')) + 1L
+      returnedAmount <- as.integer(difftime(lubridate::ymd(day_end_toUse),lubridate::ymd(day_start_toUse),units = 'days')) + 1L
       if (returnedAmount > numObsReturned) {
         returnedAmount <- numObsReturned
       }
@@ -155,161 +129,128 @@ daily_observed_fields <- function(field_id, day_start = '', day_end = '') {
 
     } else {
       strDates <- ''
-      limitString <- paste0('?limit=50')
+      limitString <- paste0('?limit=',numObsReturned)
     }
 
-    address <- paste0(urlAddress, strBeg, strCoord, strType, strDates, limitString)
+    if (propertiesToInclude[1] != '') {
+      propertiesString <- paste0('&properties=',paste0(propertiesToInclude,collapse = ','))
+    } else {
+      propertiesString <- ''
+    }
+
+    url <- paste0(urlAddress, strBeg, strCoord, strType, strDates, limitString,propertiesString)
 
     doWeatherGet <- TRUE
 
     while (doWeatherGet == TRUE) {
-
-      requestString <- paste0('request <- httr::GET(address,
-  	                                    httr::add_headers(Authorization =
-  	                                    paste0(\"Bearer \", awhereEnv75247$token)))')
-
-      # Make request
-
-      eval(parse(text = requestString))
+      postbody = ''
+      request <- httr::GET(url, body = postbody, httr::content_type('application/json'),
+                           httr::add_headers(Authorization =paste0("Bearer ", tokenToUse)))
 
       a <- suppressMessages(httr::content(request, as = "text"))
 
-      #The JSONLITE Serializer properly handles the JSON conversion
-      x <- jsonlite::fromJSON(a, flatten = TRUE)
-
-      if (grepl('API Access Expired',a)) {
-        get_token(awhereEnv75247$uid,awhereEnv75247$secret)
-      } else {
-        doWeatherGet <- FALSE
-      }
+      doWeatherGet <- check_JSON(a,request)
     }
+
+    #The JSONLITE Serializer properly handles the JSON conversion
+    x <- jsonlite::fromJSON(a, flatten = TRUE)
 
     data <- data.table::as.data.table(x[[1]])
 
-    varNames <- colnames(data)
-
-    #This removes the non-data info returned with the JSON object
-    data[,grep('_links',varNames) := NULL, with = FALSE]
-    data[,grep('.units',varNames) := NULL, with = FALSE]
-
     dataList[[i]] <- data
-
   }
 
-
   allWeath <- rbindlist(dataList)
-  setkey(allWeath,date)
+
+  varNames <- colnames(allWeath)
+
+  #This removes the non-data info returned with the JSON object
+  allWeath[,grep('_links',varNames) := NULL]
+  allWeath[,grep('.units',varNames) := NULL]
+
+  currentNames <- data.table::copy(colnames(allWeath))
+  allWeath[,field_id  := field_id]
+  data.table::setcolorder(allWeath,c('field_id',currentNames))
+
+  checkDataReturn_daily(allWeath,day_start,day_end)
 
   return(as.data.frame(allWeath))
 }
 
 
-#' @title daily_observed_latlng.
+#' @title daily_observed_latlng
 #'
 #' @description
-#' \code{daily_observed_latlng} calls Daily Observed Weather by Geolocation Endpoint of API using Lat/Lon
+#' \code{daily_observed_latlng} pulls historical weather data from aWhere's API based on latitude & longitude
 #'
 #' @details
-#' The Weather APIs provide access to aWhere's agriculture-specific Weather Terrain™ system,
-#' and allows retrieval and integration of data across all different time ranges—long term normals,
+#' This function returns weather data on Min/Max Temperature, Precipitation,
+#' Min/Max Humidity, Solar Radiation, and Maximum Wind Speed,
+#' Morning Max Windspeed, and Average Windspeed for the location specified by latitude and longitude.
+#' Default units are returned by the API. Latitude and longitude must be in decimal degrees.
+#'
+#' The Weather APIs provide access to aWhere's agriculture-specific Weather Terrain system,
+#' and allows retrieval and integration of data across all different time ranges, long term normals,
 #' daily observed, current weather, and forecasts. These APIs are designed for efficiency,
 #' allowing you to customize the responses to return just the attributes you need.
 #'
 #' Understanding the recent and long-term daily weather is critical for making in-season decisions.
-#' This API opens the weather attributes that matter most to agriculture. By default you are allowed
-#' access of up to 30 months of data (beyond that, use the Norms API to get multi-year averages).
-#' This function assumes that the data to be requested is Min/Max Temperature, Precipitation,
-#' Min/Max Humidity, Solar Radiation, and Maximum Wind Speed,
-#' Morning Max Windspeed, and Average Windspeed.  Uses the lat/lon construct for requesting data.
-#' Uses default units returned by the API
+#' This API opens the weather attributes that matter most to agriculture.
+#'
+#' Note about dates: The system does not adjust for any difference in dates between the location of the user
+#'           and where data is being requested from.  It is the responsibility of the user to ensure a valid
+#'           date range is specified given any differences in timezone.  These differences can have implications
+#'           for whether a given date should be requested from the daily_observed functions or the forecast functions
 #'
 #' @references http://developer.awhere.com/api/reference/weather/observations/geolocation
 #'
-#' @param - latitude: the latitude of the requested location
-#' @param - longitude: the longitude of the requested locations
-#' @param - day_start: character string of start date in form: YYYY-MM-DD
-#'                    Defaults to system date -1 if left blank
-#' @param - day_end: character string of end date in form: YYYY-MM-DD
-#'                  If Not included will return data only for start date
-#' @return data.table of requested data for dates requested
+#' @param - latitude: the latitude of the requested location (double)
+#' @param - longitude: the longitude of the requested locations (double)
+#' @param - day_start: character string of the first day for which you want to retrieve data, in the form: YYYY-MM-DD
+#' @param - day_end: character string of the last day for which you want to retrieve data, in the form: YYYY-MM-DD
+#' @param - propertiesToInclude: character vector of properties to retrieve from API.  Valid values are temperatures, precipitation, solar, relativeHumidity, wind (optional)
+#' @param - keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#'
+#' @import httr
+#' @import data.table
+#' @import lubridate
+#' @import jsonlite
+#'
+#' @return data.frame of requested data for dates requested
 #'
 #'
 #' @examples
-#' \dontrun{daily_observed_latlng('39.8282', '-98.5795','2014-04-28','2015-05-01')}
+#' \dontrun{daily_observed_latlng(latitude = 39.8282
+#'                                ,longitude = -98.5795
+#'                                ,day_start = '2018-04-28'
+#'                                ,day_end = '2018-05-01')}
 
 #' @export
 
 
-daily_observed_latlng <- function(latitude, longitude, day_start = as.character(ymd(Sys.Date()) - days(1)), day_end = '') {
+daily_observed_latlng <- function(latitude
+                                  ,longitude
+                                  ,day_start
+                                  ,day_end
+                                  ,propertiesToInclude = ''
+                                  ,keyToUse = awhereEnv75247$uid
+                                  ,secretToUse = awhereEnv75247$secret
+                                  ,tokenToUse = awhereEnv75247$token) {
 
-  if (exists('awhereEnv75247') == FALSE) {
-    warning('Please Run the Command \'get_token()\' and then retry running command. \n')
-    return()
-  }
-
-  if (exists('uid', envir = awhereEnv75247) == FALSE |
-      exists('secret', envir = awhereEnv75247) == FALSE |
-      exists('token', envir = awhereEnv75247) == FALSE) {
-    warning('Please Run the Command \'get_token()\' and then retry running command. \n')
-    return()
-  }
-
-  if (day_end != '') {
-    if (ymd(day_start) > ymd(day_end)) {
-      warning('The endDate must come after the startDate. Please correct\n')
-      return()
-    }
-  }
-
-  if (suppressWarnings(is.na(as.double(latitude))) == FALSE) {
-    if ((as.double(latitude) >= -90 & as.double(latitude) <= 90) == FALSE) {
-      warning('The entered Latitude Value is not valid. Please correct\n')
-      return()
-    }
-  } else {
-    warning('The entered Latitude Value is not valid. Please correct\n')
-    return()
-  }
-
-  if (suppressWarnings(is.na(as.double(longitude))) == FALSE) {
-    if ((as.double(longitude) >= -180 & as.double(longitude) <= 180) == FALSE) {
-      warning('The entered Longitude Value is not valid. Please correct\n')
-      return()
-    }
-  } else {
-    warning('The entered Longitude Value is not valid. Please correct\n')
-    return()
-  }
-
-  if (suppressWarnings(is.na(ymd(day_start))) == TRUE) {
-    warning('The Start Date is Not Properly Formatted.  Please change to proper format. \n')
-    return()
-  }
-
-  if ((day_end != '') == TRUE) {
-    if (suppressWarnings(is.na(ymd(day_end))) == TRUE) {
-      warning('The End Date is Not Properly Formatted.  Please change to proper format. \n')
-      return()
-    } else if (ymd(day_end) > ymd(Sys.Date()) - days(1)) {
-      warning('By default, this function can only be used to access data up until yesterday. \n
-              Use the GetForecast function to request data from today onward.\n')
-      return()
-    }
-  }
-
-  #  if (ymd(day_start) <= ymd(Sys.Date())-months(30)) {
-  #    warning('By default, the aWhere APIs only allow daily data from the previous 30 months. \n
-  #             Use the Norms API for long-term averages or speak to your account manager for longer access.\n')
-  #    return()
-  #  }
+  checkCredentials(keyToUse,secretToUse,tokenToUse)
+  checkValidLatLong(latitude,longitude)
+  checkValidStartEndDates(day_start,day_end)
+  checkPropertiesEndpoint('weather',propertiesToInclude)
 
   ## Create Request
-  #Calculate number of loops needed if requesting more than 50 days
-  numObsReturned <- 50
+  #Calculate number of loops needed if requesting more than 120 days
+  numObsReturned <- 120
 
   if (day_end != '') {
-    numOfDays <- as.numeric(difftime(ymd(day_end), ymd(day_start), units = 'days'))
-    allDates <- seq(as.Date(ymd(day_start)),as.Date(ymd(day_end)), by="days")
+    numOfDays <- as.numeric(difftime(lubridate::ymd(day_end), lubridate::ymd(day_start), units = 'days'))
+    allDates <- seq(as.Date(lubridate::ymd(day_start)),as.Date(lubridate::ymd(day_end)), by="days")
 
     loops <- ((length(allDates))) %/% numObsReturned
     remainder <- ((length(allDates))) %% numObsReturned
@@ -317,7 +258,7 @@ daily_observed_latlng <- function(latitude, longitude, day_start = as.character(
   } else {
 
     numOfDays <- 1
-    allDates <- ymd(day_start)
+    allDates <- lubridate::ymd(day_start)
     loops <- 1
     remainder <- 0
   }
@@ -329,18 +270,18 @@ daily_observed_latlng <- function(latitude, longitude, day_start = as.character(
 
   dataList <- list()
 
-  # loop through, making requests in 50-day chunks
+  # loop through, making requests in chunks of size numObsReturned
 
   for (i in 1:loops) {
 
     starting = numObsReturned*(i-1)+1
     ending = numObsReturned*i
-    day_start <- allDates[starting]
-    day_end <- allDates[ending]
-    if(is.na(day_end)) {
+    day_start_toUse <- allDates[starting]
+    day_end_toUse <- allDates[ending]
+    if(is.na(day_end_toUse)) {
       tempDates <- allDates[c(starting:length(allDates))]
-      day_start <- tempDates[1]
-      day_end <- tempDates[length(tempDates)]
+      day_start_toUse <- tempDates[1]
+      day_end_toUse   <- tempDates[length(tempDates)]
     }
 
 
@@ -351,57 +292,167 @@ daily_observed_latlng <- function(latitude, longitude, day_start = as.character(
     strBeg <- paste0('/locations')
     strCoord <- paste0('/',latitude,',',longitude)
     strType <- paste0('/observations')
-    strDates <- paste0('/',day_start,',',day_end)
+    strDates <- paste0('/',day_start_toUse,',',day_end_toUse)
 
 
-    returnedAmount <- as.integer(difftime(ymd(day_end),ymd(day_start),units = 'days')) + 1L
+    returnedAmount <- as.integer(difftime(lubridate::ymd(day_end_toUse),lubridate::ymd(day_start_toUse),units = 'days')) + 1L
     if (returnedAmount > numObsReturned) {
       returnedAmount <- numObsReturned
     }
     limitString <- paste0('?limit=',returnedAmount)
 
-    address <- paste0(urlAddress, strBeg, strCoord, strType, strDates, limitString)
+    if (propertiesToInclude[1] != '') {
+      propertiesString <- paste0('&properties=',paste0(propertiesToInclude,collapse = ','))
+    } else {
+      propertiesString <- ''
+    }
+
+    url <- paste0(urlAddress, strBeg, strCoord, strType, strDates, limitString,propertiesString)
 
     doWeatherGet <- TRUE
 
     while (doWeatherGet == TRUE) {
-
-      requestString <- paste0('request <- httr::GET(address,
-                              httr::add_headers(Authorization =
-                              paste0(\"Bearer \", awhereEnv75247$token)))')
+      postbody = ''
+      request <- httr::GET(url, body = postbody, httr::content_type('application/json'),
+                           httr::add_headers(Authorization =paste0("Bearer ", tokenToUse)))
 
       # Make request
 
-      eval(parse(text = requestString))
-
       a <- suppressMessages(httr::content(request, as = "text"))
 
-      #The JSONLITE Serializer properly handles the JSON conversion
-
-      x <- jsonlite::fromJSON(a,flatten = TRUE)
-
-      if (grepl('API Access Expired',a)) {
-        get_token(awhereEnv75247$uid,awhereEnv75247$secret)
-      } else {
-        doWeatherGet <- FALSE
-      }
+      doWeatherGet <- check_JSON(a,request)
     }
 
+    #The JSONLITE Serializer properly handles the JSON conversion
+    x <- jsonlite::fromJSON(a,flatten = TRUE)
+
     data <- data.table::as.data.table(x[[1]])
-
-    varNames <- colnames(data)
-
-    #This removes the non-data info returned with the JSON object
-    data[,grep('_links',varNames) := NULL, with = FALSE]
-    data[,grep('.units',varNames) := NULL, with = FALSE]
 
     dataList[[i]] <- data
 
   }
-
-
   allWeath <- rbindlist(dataList)
-  setkey(allWeath,date)
+
+  varNames <- colnames(allWeath)
+
+  #This removes the non-data info returned with the JSON object
+  allWeath[,grep('_links',varNames) := NULL]
+  allWeath[,grep('.units',varNames) := NULL]
+
+  currentNames <- data.table::copy(colnames(allWeath))
+  allWeath[,latitude  := latitude]
+  allWeath[,longitude := longitude]
+  data.table::setcolorder(allWeath,c('latitude','longitude',currentNames))
+
+  checkDataReturn_daily(allWeath,day_start,day_end)
 
   return(as.data.frame(allWeath))
+}
+
+#' @title daily_observed_area
+#'
+#' @description
+#' \code{daily_observed_area} pulls historical weather data from aWhere's API for a provided polygon or extent
+#'
+#' @details
+#' This function returns weather data on Min/Max Temperature, Precipitation,
+#' Min/Max Humidity, Solar Radiation, and Maximum Wind Speed,
+#' Morning Max Windspeed, and Average Windspeed for the polygon passed to the function.
+#' Default units are returned by the API. The polygon should be either a SpatialPolygons object or
+#' a well-known text character string or an extent.
+#'
+#' The Weather APIs provide access to aWhere's agriculture-specific Weather Terrain system,
+#' and allows retrieval and integration of data across all different time ranges, long term normals,
+#' daily observed, current weather, and forecasts. These APIs are designed for efficiency,
+#' allowing you to customize the responses to return just the attributes you need.
+#'
+#' Understanding the recent and long-term daily weather is critical for making in-season decisions.
+#' This API opens the weather attributes that matter most to agriculture.
+#'
+#' Note about dates: The system does not adjust for any difference in dates between the location of the user
+#'           and where data is being requested from.  It is the responsibility of the user to ensure a valid
+#'           date range is specified given any differences in timezone.  These differences can have implications
+#'           for whether a given date should be requested from the daily_observed functions or the forecast functions.
+#'           Furthermore, because this function can take as input locations that may be in different timezones, it is
+#'           the responsibility of the user to either ensure that the date range specified is valid for all relevant
+#'           locations or to break the query into pieces.
+#'
+#' @references http://developer.awhere.com/api/reference/weather/observations/geolocation
+#'
+#' @param - polygon: either a SpatialPolygons object, well-known text string, or extent from raster package
+#' @param - day_start: character string of the first day for which you want to retrieve data, in the form: YYYY-MM-DD
+#' @param - day_end: character string of the last day for which you want to retrieve data, in the form: YYYY-MM-DD
+#' @param - propertiesToInclude: character vector of properties to retrieve from API.  Valid values are temperatures, precipitation, solar, relativeHumidity, wind (optional)
+#' @param - numcores: number of cores to use in parallel loop. To check number of available cores: parallel::detectCores()
+#'                    If you receive an error regarding the speed you are making calls, reduce this number
+#' @param - bypassNumCallCheck: set to TRUE to avoid prompting the user to confirm that they want to begin making API calls
+#' @param - keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#'
+#' @import httr
+#' @import data.table
+#' @import lubridate
+#' @import jsonlite
+#' @import foreach
+#' @import doParallel
+#' @import rgeos
+#'
+#' @return data.frame of requested data for dates requested
+#'
+#'
+#' @examples
+#' \dontrun{daily_observed_area(polygon = raster::getData('GADM', country = "Gambia", level = 0, download = T),
+#'                                ,day_start = '2018-04-28'
+#'                                ,day_end = '2018-05-01'
+#'                                ,numcores = 2)}
+
+#' @export
+
+
+daily_observed_area <- function(polygon
+                                ,day_start
+                                ,day_end
+                                ,propertiesToInclude = ''
+                                ,numcores = 2
+                                ,bypassNumCallCheck = FALSE
+                                ,keyToUse = awhereEnv75247$uid
+                                ,secretToUse = awhereEnv75247$secret
+                                ,tokenToUse = awhereEnv75247$token) {
+
+  checkCredentials(keyToUse,secretToUse,tokenToUse)
+  checkValidStartEndDates(day_start,day_end)
+
+  cat(paste0('Creating aWhere Raster Grid within Polygon\n'))
+  grid <- create_awhere_grid(polygon)
+
+  verify_api_calls(grid,bypassNumCallCheck)
+
+  cat(paste0('Requesting data using parallal API calls\n'))
+  doParallel::registerDoParallel(cores=numcores)
+
+  observed <- foreach::foreach(j=c(1:nrow(grid)), .packages = c("aWhereAPI")) %dopar% {
+
+    t <- daily_observed_latlng(latitude = grid$lat[j]
+                               ,longitude = grid$lon[j]
+                               ,day_start = day_start
+                               ,day_end = day_end
+                               ,propertiesToInclude = propertiesToInclude
+                               ,keyToUse = keyToUse
+                               ,secretToUse = secretToUse
+                               ,tokenToUse = tokenToUse)
+
+    currentNames <- colnames(t)
+
+    t$gridy <- grid$gridy[j]
+    t$gridx <- grid$gridx[j]
+
+    data.table::setcolorder(t, c(currentNames[c(1:2)], "gridy", "gridx", currentNames[c(3:length(currentNames))]))
+
+    return(t)
+
+  }
+
+  observed <- data.table::rbindlist(observed)
+  return(as.data.frame(observed))
 }

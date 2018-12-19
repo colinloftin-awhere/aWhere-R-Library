@@ -2,25 +2,33 @@
 % Please edit documentation in R/current-conditions.R
 \name{current_conditions_fields}
 \alias{current_conditions_fields}
-\title{current_conditions_fields.}
+\title{current_conditions_fields}
 \usage{
-current_conditions_fields(field_id, sources = "all")
+current_conditions_fields(field_id, sources = "all",
+  keyToUse = awhereEnv75247$uid, secretToUse = awhereEnv75247$secret,
+  tokenToUse = awhereEnv75247$token)
 }
 \arguments{
 \item{-}{field_id: the field_id having previously been created with the createField Function}
 
 \item{-}{sources: Which source to use for pulling the current conditions.  Valid values are
 'metar', 'mesonet', 'metar-mesonet', 'pws', 'all'.  Default value is 'all'}
+
+\item{-}{keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
 }
 \value{
-data.table of requested data for dates requested
+data.frame of requested data for dates requested
 }
 \description{
 \code{current_conditions_fields} calls Current Weather Conditions Endpoint of API using Fields Name Constuct
 }
 \details{
-The Weather APIs provide access to aWhere's agriculture-specific Weather Terrain™ system,
-and allows retrieval and integration of data across all different time ranges—long term normals,
+The Weather APIs provide access to aWhere's agriculture-specific Weather Terrain system,
+and allows retrieval and integration of data across all different time ranges long term normals,
 daily observed, current weather, and forecasts. These APIs are designed for efficiency,
 allowing you to customize the responses to return just the attributes you need.
 
@@ -32,9 +40,8 @@ that is capable of hourly updates.  Uses the Fields Name construct for requestio
 Uses default units returned by the API
 }
 \examples{
-\dontrun{current_conditions_fields('field123','all')}
+\dontrun{current_conditions_fields('field_test','all')}
 }
 \references{
 http://developer.awhere.com/api/reference/weather/current
 }
-

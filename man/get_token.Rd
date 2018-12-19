@@ -4,23 +4,31 @@
 \alias{get_token}
 \title{Get Access Token}
 \usage{
-get_token(uid, secret)
+get_token(uid, secret, use_environment = TRUE)
 }
 \arguments{
-\item{-}{uid: Username associated with the aWhere API}
+\item{-}{uid: Consumer key associated with the user's aWhere API account}
 
-\item{-}{secret: Alphanumeric key associated with your aWhere API account}
+\item{-}{secret: Consumer secret associated the user's aWhere API account}
+
+\item{-}{use_enviroment: Optional logical value, determines whether API access
+token will be saved in a local locked environment in addition to being returned
+by the function. Defaults to \code{TRUE} to avoid breaking existing code.}
 }
 \value{
-None
+List with three elements:#'
+error: logical indicating whether there was an error
+error_message: \code{NULL} if error is \code{FALSE}, a character error message otherwise
+token: aWhere API access token value
 }
 \description{
 \code{get_token} gets Access Token for V2 aWhere API
 }
 \details{
-this script gets the aWHERE access token for the current session of the API
+This script provides an aWhere access token for the current session of the API. Information for the key and secret in this
+function can be found on a user's account at developer.awhere.com, under the apps.
 }
 \examples{
-\dontrun{get_token(uid, secret)}
+\dontrun{get_token("uid", "secret")}
+\dontrun{token_response <- get_token('uid', 'secret', use_environment = FALSE)}
 }
-

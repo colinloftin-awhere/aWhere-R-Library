@@ -2,77 +2,114 @@
 % Please edit documentation in R/agronomic-norms.R
 \name{agronomic_norms_latlng}
 \alias{agronomic_norms_latlng}
-\title{Agronomic Norms Latitude & Longitude.}
+\title{agronomic_norms_latlng}
 \usage{
-agronomic_norms_latlng(latitude, longitude, month_day_start,
-  month_day_end = "", year_start, yearEnd, exclude_years = "",
+agronomic_norms_latlng(latitude, longitude, month_day_start, month_day_end,
+  year_start, year_end, propertiesToInclude = "", exclude_years = NULL,
   accumulation_start_date = "", gdd_method = "standard",
-  gdd_base_temp = "10", gdd_min_boundary = "10", gdd_max_boundary = "30")
+  gdd_base_temp = 10, gdd_min_boundary = 10, gdd_max_boundary = 30,
+  includeFeb29thData = TRUE, keyToUse = awhereEnv75247$uid,
+  secretToUse = awhereEnv75247$secret,
+  tokenToUse = awhereEnv75247$token)
 }
 \arguments{
-\item{-}{latitude: the latitude for the location for which you want data}
+\item{-}{latitude: the latitude of the requested location (double, required)}
 
-\item{-}{longitude: the latitude for the location for which you want data}
+\item{-}{longitude: the longitude of the requested locations (double, required)}
 
-\item{-}{month_day_start: character string of the month and day for the start
-of the range of days you are calculating norms for, e.g., '07-01' (July 1)}
+\item{-}{month_day_start: character string of the first month and day for which you want to retrieve data,
+in the form: MM-DD.  This is the start of your date range. e.g. '07-01' (July 1) (required)}
 
-\item{-}{month_day_end: character string of the month and day for the end of the
-range of days you are calculating norms for, e.g., '07-10' (July 10)}
+\item{-}{month_day_end: character string of the last month and day for which you want to retrieve data,
+in the form: MM-DD.  This is the end of your date range. e.g. '07-01' (July 1) (required)}
 
-\item{-}{year_start: the starting year (inclusive) of the range of years for which
-you're calculating norms, as a string, e.g., '2008'}
+\item{-}{year_start: character string of the starting year (inclusive) of the range of years for which
+you're calculating norms, in the form YYYY. e.g., 2008 (required)}
 
-\item{-}{year_end: the end year (inclusive) of the range of years for which you're
-calculating norms, as a string, e.g., '2015'}
+\item{-}{year_end: character string of the last year (inclusive) of the range of years for which
+you're calculating norms, in the form YYYY. e.g., 2015 (required)}
 
-\item{-}{exclude_years: You can opt to exclude one or more years from the range, and
-it's values will not be included in the averages. To exclude
-multiple years, separate them with a comma. Note: You must always have
-at least three years of data to average}
+\item{-}{propertiesToInclude: character vector of properties to retrieve from API.  Valid values are accumulations, gdd, pet, ppet, accumulatedGdd, accumulatedPrecipitation, accumulatedPet, accumulatedPpet (optional)}
 
-\item{-}{accumulation_start_date: If you want to start counting accumulations from
+\item{-}{exclude_year: Year or years which you'd like to exclude from
+ your range of years on which to calculate norms. To exclude
+ multiple years, provide a vector of years. You must include
+at least three years of data with which to calculate the norms. (numeric, optional)}
+
+\item{-}{accumulation_start_date: Allows the user to start counting accumulations from
 before the specified start date (or before the
-planting date if using the most recent Planting),
-use this parameter to specify the date from which
-you wish to start counting. The daily values object
+planting date if using the most recent planting).
+Use this parameter to specify the date from which
+you wish to start counting, in the form: YYYY-MM-DD.
+The daily values object
 will still only return the days between the start
-and end date. This date must come before the start date.}
+and end date. This date must come before the start date. (optional)}
 
 \item{-}{gdd_method: There are variety of equations available for calculating growing degree-days.
 Valid entries are: 'standard', 'modifiedstandard', 'min-temp-cap', 'min-temp-constant'
 See the API documentation for a description of each method.  The standard
-method will be used if none is specified}
+method will be used if none is specified. (character - optional)}
 
 \item{-}{gdd_base_temp: The base temp to use for the any of the GDD equations. The default value of 10 will
-be used if none is specified}
+be used if none is specified. (optional)}
 
 \item{-}{gdd_min_boundary: The minimum boundary to use in the selected GDD equation.
 The behavior of this value is different depending on the equation you're using
-The default value of 10 will be used if none is specified}
+The default value of 10 will be used if none is specified. (optional)}
 
 \item{-}{gdd_max_boundary: The max boundary to use in the selected GDD equation. The
 behavior of this value is different depending on the equation you're using.
-The default value of 30 will be used if none is specified}
+The default value of 30 will be used if none is specified. (optional)}
+
+\item{-}{includeFeb29thData: Whether to keep data from Feb 29th on leap years.  Because weather/agronomics
+summary statistics are calculated via the calendar date and 3 years are required
+to generate a value, data from this date is more likely to be NA.  ALlows user
+to drop this data to avoid later problems (defaults to TRUE)}
+
+\item{-}{keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
 }
 \value{
-data.table of requested data for dates requested
+dataframe of requested data for dates requested
 }
 \description{
-\code{agronomic_norms_latlng} calls Historic Agronomic Norms by Geolocation Endpoint of API using Lat/Lon
+\code{agronomic_norms_latlng} pulls agronomic norm data from aWhere's API based on latitude & longitude
 }
 \details{
-This is a flexible API that allows you to calculate the averages for agronomic values
-and accumulations across any range of years for which we have data. Whereas the Agronomic
-Values and Accumulations API only supports up to 30 months of daily data, this API allow
-you to compare this year and the previous year to the long-term normals (however many years
-you want to include).  Uses the aWhere API Lat/Lon construct to request data. Uses default
-units returned by the API
+This function allows you to calculate the averages for agronomic attributes
+across any range of years for which data are available.  The data pulled includes norms for
+growing degree days (GDDs), potential evapotranspiration (PET), Precipitation over
+potential evapotranspiration (P/PET), accumulated GDDs, accumulated precipitation,
+accumulated PET, and accumulated P/PET, along with the standard deviations
+for these variables.  The data pulled is for the latitude and longitude identified.
+Default units are returned by the API.
+
+The data returned in this function
+allow you to compare this year or previous years to the long-term normals, calculated as
+the average of those agronomic conditions on that day in that location over the years specified.
+
+Note about dates: The system does not adjust for any difference in dates between the location of the user
+          and where data is being requested from.  It is the responsibility of the user to ensure a valid
+          date range is specified given any differences in timezone.  These differences can have implications
+          for whether a given date should be requested from the daily_observed functions or the forecast functions
 }
 \examples{
-\dontrun{gronomic_norms_latlng('39.8282', '-98.5795', '07-01', '07-10', '2008', '2015','2010,2011','','standard','10','10','30')}
+\dontrun{agronomic_norms_latlng(latitude = 39.8282
+                                ,longitude = -98.5795
+                                ,month_day_start = '02-01'
+                                ,month_day_end = '03-10'
+                                ,year_start = 2008
+                                ,year_end = 2015
+                                ,exclude_years = c(2010,2011)
+                                ,accumulation_start_date = ''
+                                ,gdd_method = 'standard'
+                                ,gdd_base_temp = 10
+                                ,gdd_min_boundary = 10
+                                ,gdd_max_boundary = 30)}
 }
 \references{
-http://developer.awhere.com/api/reference/agronomics/norms/geolocation
+http://developer.awhere.com/api/reference/agronomics/norms
 }
-

@@ -4,23 +4,31 @@
 \alias{get_planting}
 \title{Get Planting}
 \usage{
-get_planting(field_id = "", planting_id = "", current = F, offset = "",
-  limit = "")
+get_planting(field_id, planting_id = "", current = F, offset = "",
+  limit = "", keyToUse = awhereEnv75247$uid,
+  secretToUse = awhereEnv75247$secret,
+  tokenToUse = awhereEnv75247$token)
 }
 \arguments{
 \item{-}{field_id: a field ID to look within (string)}
 
-\item{-}{planting_id: a planting ID to look for (string)}
+\item{-}{planting_id: a planting ID to look for (string - optional)}
 
 \item{-}{current: whether to just get current plantings(T) or include historical plantings(F).
-To get most recent planting record for a field, set current to TRUE and do not pass in a planting_id (boolean)}
+To get most recent planting record for a field, set current to TRUE and do not pass in a planting_id (boolean - optional)}
 
-\item{-}{offset: The number of objects to skip before returning objects. Used in conjunction with offset to paginate.}
+\item{-}{offset: The number of objects to skip before returning objects. Used in conjunction with offset to paginate. (optional)}
 
-\item{-}{limit: The number of results to include on each of page of listed fields. Used in conjunction with offset to paginate.}
+\item{-}{limit: The number of results to include on each of page of listed fields. Used in conjunction with offset to paginate. (optional)}
+
+\item{-}{keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
 }
 \value{
-- data: data.table containing information about requested field(s)
+- data.frame containing information about requested field(s)
 }
 \description{
 \code{get_planting} Gets a planting or list of plantings in the aWhere platform for which you can request weather
@@ -40,12 +48,11 @@ for any given field in the platform. In this function by setting an Id you can r
 and agronomics for that location in all the other APIs.
 }
 \examples{
-\dontrun{get_planting(field_id='field1')
-get_planting(field_id = 'field1', planting_id = '73227')
-get_planting('field1', current = T)
-get_planting(field_id='field1', offset = '0', limit = '5')}
+\dontrun{get_planting(field_id='field_test')
+get_planting(field_id = 'field_test', planting_id = '156035')
+get_planting('field_test', current = T)
+get_planting(field_id='field_test', offset = '0', limit = '5')}
 }
 \references{
 http://developer.awhere.com/api/reference/plantings/get-plantings
 }
-

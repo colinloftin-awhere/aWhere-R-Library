@@ -1,182 +1,84 @@
-#' @title weather_norms_fields.
+#' @title weather_norms_fields
 #'
 #' @description
-#' \code{weather_norms_fields} calls Historic Weather Norms Endpoint of API using Field Location Construct
+#' \code{weather_norms_fields} pulls long term norm weather data from aWhere's API based on field id
 #'
 #' @details
-#' This is a flexible API that allows you to calculate the averages for weather attribute
-#' across any range of years for which we have data. Whereas the Daily Observed API only
-#' supports up to 30 months of daily data, this API allow you to compare this year and
-#' the previous year to the long-term normals (however many years you want to include).
-#' Each day's worth of data also includes the standard deviation for the average.
+#' This function allows you to calculate the averages for weather attributes
+#' across any range of years for which data are available.  The data pulled includes
+#' meanTemp, maxTemp, minTemp, precipitation average, solar radiation average,
+#' minHumidity, maxHumidity, maxWind and averageWind, along with the standard deviations
+#' for these variables.  The data pulled is for the field id identified.
+#'
+#' The data returned in this function
+#' allow you to compare this year or previous years to the long-term normals, calculated as
+#' the average of those weather conditions on that day in that location over the years specified.
+#'
+#' Note about dates: The system does not adjust for any difference in dates between the location of the user
+#'           and where data is being requested from.  It is the responsibility of the user to ensure a valid
+#'           date range is specified given any differences in timezone.  These differences can have implications
+#'           for whether a given date should be requested from the daily_observed functions or the forecast functions
 #'
 #' @references http://developer.awhere.com/api/reference/weather/norms
 #'
-#' @param - field_id: the field_id having previously been created with the createField Function
-#' @param - monthday_start: required, character string of the month and day for the start
-#'                         of the range of days you are calculating norms for, e.g., '07-01' (July 1)
-#' @param - monthday_end: required, character string of the month and day for the end of the
-#'                       range of days you are calculating norms for, e.g., '07-10' (July 10)
-#' @param - year_start: the starting year (inclusive) of the range of years for which
-#'                     you're calculating norms, as a string, e.g., '2008'
-#' @param - year_start: the end year (inclusive) of the range of years for which you're
-#'                     calculating norms, as a string, e.g., '2015'
-#' @param - exclude_year: You can opt to exclude one or more years from the range, and
-#'                         it's values will not be included in the averages. To exclude
-#'                        multiple years, separate them with a comma. Note: You must always have
-#'                       at least three years of data to average
+#' @param - field_id: the field_id associated with the location for which you want to pull data.
+#'                    Field IDs are created using the create_field function. (string)
+#' @param - monthday_start: character string of the first month and day for which you want to retrieve data,
+#'                          in the form: MM-DD.  This is the start of your date range. e.g. '07-01' (July 1) (required)
+#' @param - monthday_end: character string of the last month and day for which you want to retrieve data,
+#'                          in the form: MM-DD.  This is the end of your date range. e.g. '07-01' (July 1) (required)
+#' @param - year_start: character string of the starting year (inclusive) of the range of years for which
+#'                     you're calculating norms, in the form YYYY. e.g., 2008 (required)
+#' @param - year_end: character string of the last year (inclusive) of the range of years for which
+#'                     you're calculating norms, in the form YYYY. e.g., 2015 (required)
+#' @param - propertiesToInclude: character vector of properties to retrieve from API.  Valid values are meanTemp, maxTemp, minTemp, precipitation, solar, maxHumidity, minHumidity, dailyMaxWind (optional)
+#' @param - exclude_year: Year or years which you'd like to exclude from
+#'                        your range of years on which to calculate norms. To exclude
+#'                        multiple years, provide a vector of years. You must include
+#'                       at least three years of data with which to calculate the norms. (numeric, optional)
+#' @param - includeFeb29thData: Whether to keep data from Feb 29th on leap years.  Because weather/agronomics
+#'                              summary statistics are calculated via the calendar date and 3 years are required
+#'                              to generate a value, data from this date is more likely to be NA.  ALlows user
+#'                              to drop this data to avoid later problems (defaults to TRUE)
+#' @param - keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)
 #'
-#' @return data.table of requested data for dates requested
+#' @import httr
+#' @import data.table
+#' @import lubridate
+#' @import jsonlite
+#'
+#' @return dataframe of requested data for dates requested
 #'
 #' @examples
-#' \dontrun{weather_norms_fields('field123', monthday_start = '07-01', monthday_end = '07-10',
-#' year_start = '2008', year_end = '2015', exclude_years = '2009,2013')}
+#' \dontrun{weather_norms_fields(field_id = "field_test"
+#'                               ,monthday_start = "06-01"
+#'                               ,monthday_end = "09-01"
+#'                               ,year_start = 2006
+#'                               ,year_end = 2015)}
 #' @export
 #'
-weather_norms_fields <- function(field_id, monthday_start = '', monthday_end = '',
-                                 year_start = '', year_end = '', exclude_years = '') {
+weather_norms_fields <- function(field_id
+                                 ,monthday_start
+                                 ,monthday_end
+                                 ,year_start
+                                 ,year_end
+                                 ,propertiesToInclude = ''
+                                 ,exclude_years = NULL
+                                 ,includeFeb29thData = TRUE
+                                 ,keyToUse = awhereEnv75247$uid
+                                 ,secretToUse = awhereEnv75247$secret
+                                 ,tokenToUse = awhereEnv75247$token) {
 
-  #############################################################
   #Checking Input Parameters
-  if (exists('awhereEnv75247') == FALSE) {
-    warning('Please Run the Command \'get_token()\' and then retry running command. \n')
-    return()
-  }
-
-  if (exists('uid', envir = awhereEnv75247) == FALSE |
-      exists('secret', envir = awhereEnv75247) == FALSE |
-      exists('token', envir = awhereEnv75247) == FALSE) {
-    warning('Please Run the Command \'get_token()\' and then retry running command. \n')
-    return()
-  }
-
-  currentFields <- get_fields(field_id)
-  if ((field_id %in% currentFields$field_id) == FALSE) {
-    warning('The Provided field name is not a field currently associated with your account. \n
-             Please create the field before proceeding. \n')
-    return()
-  }
-
-  if (monthday_start != '') {
-    monthday_startTest <- strsplit(monthday_start,'-')
-    for (z in 1:length(monthday_startTest[[1]])) {
-      if (nchar(monthday_startTest[[1]][z]) != 2) {
-        warning('The parameter monthday_start is not properly formatted.  Please correct. \n')
-        return()
-      }
-    }
-    if ((as.integer(monthday_startTest[[1]][1]) >= 1 & as.integer(monthday_startTest[[1]][1]) <= 12) == FALSE) {
-      warning('The month parameter in monthday_start is not a valid value.  Please correct. \n')
-      return()
-    }
-    if (monthday_startTest[[1]][1] %in% c('4','6','9','11')) {
-      if ((as.integer(monthday_startTest[[1]][2]) >= 1 & as.integer(monthday_startTest[[1]][2]) <= 30) == FALSE) {
-        warning('The day parameter in monthday_start is not a valid value.  Please correct. \n')
-        return()
-      }
-    } else if (monthday_startTest[[1]][1] %in% c('2')) {
-      if ((as.integer(monthday_startTest[[1]][2]) >= 1 & as.integer(monthday_startTest[[1]][2]) <= 28) == FALSE) {
-        warning('The day parameter in monthday_start is not a valid value.  Please correct. \n')
-        return()
-      }
-    } else {
-      if ((as.integer(monthday_startTest[[1]][2]) >= 1 & as.integer(monthday_startTest[[1]][2]) <= 31) == FALSE) {
-        warning('The day parameter in monthday_start is not a valid value.  Please correct. \n')
-        return()
-      }
-    }
-  }
-
-  if (monthday_end != '') {
-    if (monthday_start == '') {
-      warning('If the parameter monthday_end is specified so must monthday_start.  Please correct. \n')
-      return()
-    }
-    monthday_endTest <- strsplit(monthday_end,'-')
-    for (z in 1:length(monthday_endTest[[1]])) {
-      if (nchar(monthday_endTest[[1]][z]) != 2) {
-        warning('The parameter monthday_end is not properly formatted.  Please correct. \n')
-        return()
-      }
-    }
-    if ((as.integer(monthday_endTest[[1]][1]) >= 1 & as.integer(monthday_endTest[[1]][1]) <= 12) == FALSE) {
-      warning('The month parameter in monthday_end is not a valid value.  Please correct. \n')
-      return()
-    }
-    if (monthday_endTest[[1]][1] %in% c('4','6','9','11')) {
-      if ((as.integer(monthday_endTest[[1]][2]) >= 1 & as.integer(monthday_endTest[[1]][2]) <= 30) == FALSE) {
-        warning('The day parameter in monthday_end is not a valid value.  Please correct. \n')
-        return()
-      }
-    } else if (monthday_endTest[[1]][1] %in% c('2')) {
-      if ((as.integer(monthday_endTest[[1]][2]) >= 1 & as.integer(monthday_endTest[[1]][2]) <= 28) == FALSE) {
-        warning('The day parameter in monthday_end is not a valid value.  Please correct. \n')
-        return()
-      }
-    } else {
-      if ((as.integer(monthday_endTest[[1]][2]) >= 1 & as.integer(monthday_endTest[[1]][2]) <= 31) == FALSE) {
-        warning('The day parameter in monthday_end is not a valid value.  Please correct. \n')
-        return()
-      }
-    }
-  }
-
-  if (year_start != '') {
-    if (as.integer(year_start) < 1994 | as.integer(year_start) > year(Sys.Date())) {
-      warning('The year_start parameter must be between 1994 and the current year.  Please correct. \n')
-      return()
-    }
-  }
-
-  if (year_end != '') {
-    if (as.integer(year_end) < 1994 | as.integer(year_end) > year(Sys.Date())) {
-      warning('The year_end parameter must be between 1994 and the current year.  Please correct. \n')
-      return()
-    }
-  }
-
-  if (year_start != '' & monthday_start != '') {
-    if (ymd(paste0(year_start,'-',monthday_start)) > ymd(Sys.Date())) {
-      warning('The combination of year_start and monthday_start implies data from the future must be retrieved.  Please correct. \n')
-      return()
-    }
-  }
-
-  if (year_end != '' & monthday_end != '') {
-    if (ymd(paste0(year_end,'-',monthday_end)) > ymd(Sys.Date())) {
-      warning('The combination of year_end and monthday_end implies data from the future must be retrieved.  Please correct. \n')
-      return()
-    }
-  }
-
-  if ((((year_start != '') & (year_end == '')) | ((year_start == '') & (year_end != ''))) == TRUE) {
-    warning('Both the starting and ending years myst be specified explicitly if using years. \n')
-    return()
-  }
-
-  if ((year_start != '') & (year_end != '')) {
-    yearsToRequest <- seq(as.integer(year_start),as.integer(year_end))
-
-    if (exclude_years != '') {
-      exclude_yearsTest <- strsplit(exclude_years,',')
-      for (z in 1:length(exclude_yearsTest[[1]])) {
-        if (as.integer(exclude_yearsTest[[1]][z]) < 1994 | as.integer(exclude_yearsTest[[1]][z]) > year(Sys.Date())) {
-          warning('One of the years included in the exclude_years parameter is not in the \n
-                   proper range (1994-CurrentYear).  Please correct. \n')
-          return()
-        }
-        yearsToRequest <- yearsToRequest[yearsToRequest != as.integer(exclude_yearsTest[[1]][z])]
-      }
-    }
-
-    if (length(yearsToRequest) <= 3) {
-      warning('At least three unique years must be used in this query. Please correct. \n')
-      return()
-    }
-  }
+  checkCredentials(keyToUse,secretToUse,tokenToUse)
+  checkValidField(field_id,keyToUse,secretToUse,tokenToUse)
+  checkNormsStartEndDates(monthday_start,monthday_end)
+  checkNormsYearsToRequest(year_start,year_end,monthday_start,monthday_end,exclude_years)
+  checkPropertiesEndpoint('weather_norms',propertiesToInclude)
 
   ##############################################################################
-  dataList <- list()
 
   # Create query
 
@@ -194,239 +96,148 @@ weather_norms_fields <- function(field_id, monthday_start = '', monthday_end = '
     strMonthsDays <- ''
   }
 
-  if (exclude_years != '') {
-    strexclude_years <- paste0('?excludeYears=',exclude_years)
+  if (length(exclude_years) != 0) {
+    strexclude_years <- paste0('?excludeYears=',toString(exclude_years))
   } else {
     strexclude_years <- ''
   }
 
-  if (year_start != '' & year_end != '') {
-    strYearsType <- paste0('/years')
-    strYears <- paste0('/',year_start,',',year_end)
-    address <- paste0(urlAddress, strBeg, strCoord, strType, strMonthsDays, strYearsType,strYears,strexclude_years)
+  if (propertiesToInclude[1] != '') {
+    if (strexclude_years == '') {
+      propertiesString <- paste0('?properties=',paste0(propertiesToInclude,collapse = ','))
+    } else {
+      propertiesString <- paste0('&properties=',paste0(propertiesToInclude,collapse = ','))
+    }
   } else {
-    address <- paste0(urlAddress, strBeg, strCoord, strType, strMonthsDays,strexclude_years)
+    propertiesString <- ''
   }
+
+
+  strYearsType <- paste0('/years')
+  strYears <- paste0('/',year_start,',',year_end)
+  url <- paste0(urlAddress, strBeg, strCoord, strType, strMonthsDays, strYearsType,strYears,strexclude_years,propertiesString)
+
   doWeatherGet <- TRUE
   while (doWeatherGet == TRUE) {
-    requestString <- 'request <- httr::GET(address,
-  	                                    httr::add_headers(Authorization =
-  	                                    paste0(\"Bearer \", awhereEnv75247$token)))'
+    postbody = ''
+    request <- httr::GET(url, body = postbody, httr::content_type('application/json'),
+                         httr::add_headers(Authorization =paste0("Bearer ", tokenToUse)))
     # Make request
-    eval(parse(text = requestString))
 
     a <- suppressMessages(httr::content(request, as = "text"))
 
-    #The JSONLITE Serializer properly handles the JSON conversion
-
-    x <- jsonlite::fromJSON(a,flatten = TRUE)
-
-    if (grepl('API Access Expired',a)) {
-      get_token(awhereEnv75247$uid,awhereEnv75247$secret)
-    } else {
-      doWeatherGet <- FALSE
-    }
+    doWeatherGet <- check_JSON(a,request)
   }
+
+  #The JSONLITE Serializer properly handles the JSON conversion
+  x <- jsonlite::fromJSON(a,flatten = TRUE)
 
   data <- data.table::as.data.table(x$norms)
 
+  #Get rid of leap yearData
+  if (includeFeb29thData == FALSE) {
+    data <- data[day != '02-29',]
+  }
+
   varNames <- colnames(data)
   #This removes the non-data info returned with the JSON object
-  data[,grep('_links',varNames) := NULL, with = FALSE]
-  data[,grep('.units',varNames) := NULL, with = FALSE]
+  data[,grep('_links',varNames) := NULL]
+  data[,grep('.units',varNames) := NULL]
 
-  setnames(data,varNames)
-  setkey(data,day)
+  currentNames <- data.table::copy(colnames(data))
+  data[,field_id  := field_id]
+  data.table::setcolorder(data,c('field_id',currentNames))
+
+  checkDataReturn_norms(data,monthday_start,monthday_end,year_start,year_end,exclude_years,includeFeb29thData)
 
   return(as.data.frame(data))
 }
 
-#' @title Get Weather Norms Lat Lon
+#' @title weather_norms_latlng
 #'
 #' @description
-#' \code{weather_norms_latlng} calls Historic Agronomic Norms by Geolocation Endpoint of API using Lat/Lon
+#' \code{weather_norms_latlng} pulls long term norm weather data from aWhere's API based on latitude & longitude
 #'
 #' @details
-#' This is a flexible API that allows you to calculate the averages for weather attribute
-#' across any range of years for which we have data. Whereas the Daily Observed API only
-#' supports up to 30 months of daily data, this API allow you to compare this year and
-#' the previous year to the long-term normals (however many years you want to include).
-#' Each day's worth of data also includes the standard deviation for the average.
+#' This function allows you to calculate the averages for weather attributes
+#' across any range of years for which data are available.  The data pulled includes
+#' meanTemp, maxTemp, minTemp, precipitation average, solar radiation average,
+#' minHumidity, maxHumidity, maxWind and averageWind, along with the standard deviations
+#' for these variables.  The data pulled is for the latitude & longitude identified.
+#'
+#' The data returned in this function
+#' allow you to compare this year or previous years to the long-term normals, calculated as
+#' the average of those weather conditions on that day in that location over the years specified.
+#'
+#' Note about dates: The system does not adjust for any difference in dates between the location of the user
+#'           and where data is being requested from.  It is the responsibility of the user to ensure a valid
+#'           date range is specified given any differences in timezone.  These differences can have implications
+#'           for whether a given date should be requested from the daily_observed functions or the forecast functions
 #'
 #' @references http://developer.awhere.com/api/reference/weather/norms
 #'
-#' @param - latitude: the latitude for the location for which you want data
-#' @param - longitude: the latitude for the location for which you want data
-#' @param - monthday_start: character string of the month and day for the start
-#'                         of the range of days you are calculating norms for, e.g., '07-01' (July 1)
-#' @param - monthday_end: character string of the month and day for the end of the
-#'                       range of days you are calculating norms for, e.g., '07-10' (July 10)
-#' @param - year_start: the starting year (inclusive) of the range of years for which
-#'                     you're calculating norms, as a string, e.g., '2008'
-#' @param - year_end: the end year (inclusive) of the range of years for which you're
-#'                     calculating norms, as a string, e.g., '2015'
-#' @param - exclude_years: You can opt to exclude one or more years from the range, and
-#'                        it's values will not be included in the averages. To exclude
-#'                       multiple years, separate them with a comma. Note: You must always have
-#'                       at least three years of data to average
+#' @param - latitude: the latitude of the requested location (double, required)
+#' @param - longitude: the longitude of the requested locations (double, required)
+#' @param - monthday_start: character string of the first month and day for which you want to retrieve data,
+#'                          in the form: MM-DD.  This is the start of your date range. e.g. '07-01' (July 1) (required)
+#' @param - monthday_end: character string of the last month and day for which you want to retrieve data,
+#'                          in the form: MM-DD.  This is the end of your date range. e.g. '07-01' (July 1) (required)
+#' @param - year_start: character string of the starting year (inclusive) of the range of years for which
+#'                     you're calculating norms, in the form YYYY. e.g., 2008 (required)
+#' @param - year_end: character string of the last year (inclusive) of the range of years for which
+#'                     you're calculating norms, in the form YYYY. e.g., 2015 (required)
+#' @param - propertiesToInclude: character vector of properties to retrieve from API.  Valid values are meanTemp, maxTemp, minTemp, precipitation, solar, maxHumidity, minHumidity, dailyMaxWind (optional)
+#' @param - exclude_year: Year or years which you'd like to exclude from
+#'                        your range of years on which to calculate norms. To exclude
+#'                        multiple years, provide a vector of years. You must include
+#'                       at least three years of data with which to calculate the norms. (numeric, optional)
+#' @param - includeFeb29thData: Whether to keep data from Feb 29th on leap years.  Because weather/agronomics
+#'                              summary statistics are calculated via the calendar date and 3 years are required
+#'                              to generate a value, data from this date is more likely to be NA.  ALlows user
+#'                              to drop this data to avoid later problems (defaults to TRUE)
+#' @param - keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)
 #'
-#' @return data.table of requested data for dates requested
+#' @import httr
+#' @import data.table
+#' @import lubridate
+#' @import jsonlite
+#'
+#' @return data.frame of requested data for dates requested
 #'
 #' @examples
-#' \dontrun{weather_norms_latlng('39.8282', '-98.5795', '07-01', '07-10', '2008', '2015','2010,2011')}
+#' \dontrun{weather_norms_latlng(latitude = 39.8282
+#'                               ,longitude = -98.5795
+#'                               ,monthday_start = '02-01'
+#'                               ,monthday_end = '03-10'
+#'                               ,year_start = 2008
+#'                               ,year_end = 2015
+#'                               ,exclude_years =  c(2010,2011))}
 #' @export
 
 
-weather_norms_latlng <- function(latitude, longitude, monthday_start, monthday_end = '', year_start = '', year_end = '', exclude_years = '') {
+weather_norms_latlng <- function(latitude
+                                 ,longitude
+                                 ,monthday_start
+                                 ,monthday_end
+                                 ,year_start
+                                 ,year_end
+                                 ,propertiesToInclude = ''
+                                 ,exclude_years = NULL
+                                 ,includeFeb29thData = TRUE
+                                 ,keyToUse = awhereEnv75247$uid
+                                 ,secretToUse = awhereEnv75247$secret
+                                 ,tokenToUse = awhereEnv75247$token) {
 
-  #############################################################
   #Checking Input Parameters
-
-  if (exists('awhereEnv75247') == FALSE) {
-    warning('Please Run the Command \'get_token()\' and then retry running command. \n')
-    return()
-  }
-
-  if (exists('uid', envir = awhereEnv75247) == FALSE |
-      exists('secret', envir = awhereEnv75247) == FALSE |
-      exists('token', envir = awhereEnv75247) == FALSE) {
-    warning('Please Run the Command \'get_token()\' and then retry running command. \n')
-    return()
-  }
-
-  if (suppressWarnings(is.na(as.double(latitude))) == FALSE) {
-    if ((as.double(latitude) >= -90 & as.double(latitude) <= 90) == FALSE) {
-      warning('The entered Latitude Value is not valid. Please correct\n')
-      return()
-    }
-  } else {
-    warning('The entered Latitude Value is not valid. Please correct\n')
-    return()
-  }
-
-  if (suppressWarnings(is.na(as.double(longitude))) == FALSE) {
-    if ((as.double(longitude) >= -180 & as.double(longitude) <= 180) == FALSE) {
-      warning('The entered Longitude Value is not valid. Please correct\n')
-      return()
-    }
-  } else {
-    warning('The entered Longitude Value is not valid. Please correct\n')
-    return()
-  }
-
-  monthday_startTest <- strsplit(monthday_start,'-')
-  for (z in 1:length(monthday_startTest[[1]])) {
-    if (nchar(monthday_startTest[[1]][z]) != 2) {
-      warning('The parameter monthday_start is not properly formatted.  Please correct. \n')
-      return()
-    }
-  }
-  if ((as.integer(monthday_startTest[[1]][1]) >= 1 & as.integer(monthday_startTest[[1]][1]) <= 12) == FALSE) {
-    warning('The month parameter in monthday_start is not a valid value.  Please correct. \n')
-    return()
-  }
-  if (monthday_startTest[[1]][1] %in% c('4','6','9','11')) {
-    if ((as.integer(monthday_startTest[[1]][2]) >= 1 & as.integer(monthday_startTest[[1]][2]) <= 30) == FALSE) {
-      warning('The day parameter in monthday_start is not a valid value.  Please correct. \n')
-      return()
-    }
-  } else if (monthday_startTest[[1]][1] %in% c('2')) {
-    if ((as.integer(monthday_startTest[[1]][2]) >= 1 & as.integer(monthday_startTest[[1]][2]) <= 28) == FALSE) {
-      warning('The day parameter in monthday_start is not a valid value.  Please correct. \n')
-      return()
-    }
-  } else {
-    if ((as.integer(monthday_startTest[[1]][2]) >= 1 & as.integer(monthday_startTest[[1]][2]) <= 31) == FALSE) {
-      warning('The day parameter in monthday_start is not a valid value.  Please correct. \n')
-      return()
-    }
-  }
-
-  if (monthday_end != '') {
-    monthday_endTest <- strsplit(monthday_end,'-')
-    for (z in 1:length(monthday_endTest[[1]])) {
-      if (nchar(monthday_endTest[[1]][z]) != 2) {
-        warning('The parameter monthday_end is not properly formatted.  Please correct. \n')
-        return()
-      }
-    }
-    if ((as.integer(monthday_endTest[[1]][1]) >= 1 & as.integer(monthday_endTest[[1]][1]) <= 12) == FALSE) {
-      warning('The month parameter in monthday_end is not a valid value.  Please correct. \n')
-      return()
-    }
-    if (monthday_endTest[[1]][1] %in% c('4','6','9','11')) {
-      if ((as.integer(monthday_endTest[[1]][2]) >= 1 & as.integer(monthday_endTest[[1]][2]) <= 30) == FALSE) {
-        warning('The day parameter in monthday_end is not a valid value.  Please correct. \n')
-        return()
-      }
-    } else if (monthday_endTest[[1]][1] %in% c('2')) {
-      if ((as.integer(monthday_endTest[[1]][2]) >= 1 & as.integer(monthday_endTest[[1]][2]) <= 28) == FALSE) {
-        warning('The day parameter in monthday_end is not a valid value.  Please correct. \n')
-        return()
-      }
-    } else {
-      if ((as.integer(monthday_endTest[[1]][2]) >= 1 & as.integer(monthday_endTest[[1]][2]) <= 31) == FALSE) {
-        warning('The day parameter in monthday_end is not a valid value.  Please correct. \n')
-        return()
-      }
-    }
-  }
-
-  if (year_start != '') {
-    if (as.integer(year_start) < 1994 | as.integer(year_start) > year(Sys.Date())) {
-      warning('The year_start parameter must be between 1994 and the current year.  Please correct. \n')
-      return()
-    }
-
-    if (monthday_start != '') {
-      if (ymd(paste0(year_start,'-',monthday_start)) > ymd(Sys.Date())) {
-        warning('The combination of year_start and monthday_start implies data from the future must be retrieved.  Please correct. \n')
-        return()
-      }
-    }
-  }
-
-  if (year_end != '') {
-    if (as.integer(year_end) < 1994 | as.integer(year_end) > year(Sys.Date())) {
-      warning('The year_end parameter must be between 1994 and the current year.  Please correct. \n')
-      return()
-    }
-    if (monthday_end != '') {
-      if (ymd(paste0(year_end,'-',monthday_end)) > ymd(Sys.Date())) {
-        warning('The combination of year_end and monthday_end implies data from the future must be retrieved.  Please correct. \n')
-        return()
-      }
-    }
-  }
-
-
-  yearsToRequest <- seq(as.integer(year_start),as.integer(year_end))
-
-  if (exclude_years != '') {
-    exclude_yearsTest <- strsplit(exclude_years,',')
-    for (z in 1:length(exclude_yearsTest[[1]])) {
-      if (as.integer(exclude_yearsTest[[1]][z]) < 1994 | as.integer(exclude_yearsTest[[1]][z]) > year(Sys.Date())) {
-        warning('One of the years included in the exclude_years parameter is not in the \n
-                proper range (1994-CurrentYear).  Please correct. \n')
-        return()
-      }
-      yearsToRequest <- yearsToRequest[yearsToRequest != as.integer(exclude_yearsTest[[1]][z])]
-    }
-  }
-
-  if (length(yearsToRequest) <= 3) {
-    warning('At least three unique years must be used in this query. Please correct. \n')
-    return()
-  }
-
-  if ((((year_start != '') & (year_end == '')) | ((year_start == '') & (year_end != ''))) == TRUE) {
-    warning('Both the starting and ending years myst be specified explicitly if using years. \n')
-    return()
-  }
-
+  aWhereAPI:::checkCredentials(keyToUse,secretToUse,tokenToUse)
+  aWhereAPI:::checkValidLatLong(latitude,longitude)
+  aWhereAPI:::checkNormsStartEndDates(monthday_start,monthday_end)
+  aWhereAPI:::checkNormsYearsToRequest(year_start,year_end,monthday_start,monthday_end,exclude_years)
+  aWhereAPI:::checkPropertiesEndpoint('weather_norms',propertiesToInclude)
 
   ##############################################################################
-  dataList <- list()
 
   # Create query
 
@@ -436,57 +247,204 @@ weather_norms_latlng <- function(latitude, longitude, monthday_start, monthday_e
   strCoord <- paste0('/',latitude,',',longitude)
   strType <- paste0('/norms')
 
-  if (monthday_end != '') {
+  if (monthday_start != '' & monthday_end != '') {
     strMonthsDays <- paste0('/',monthday_start,',',monthday_end)
-  } else {
+  } else if (monthday_end != '') {
     strMonthsDays <- paste0('/',monthday_start,',',monthday_start)
+  } else {
+    strMonthsDays <- ''
   }
 
-  if (exclude_years != '') {
-    strexclude_years <- paste0('?excludeYears=',exclude_years)
+  if (length(exclude_years) != 0) {
+    strexclude_years <- paste0('?excludeYears=',toString(exclude_years))
   } else {
     strexclude_years <- ''
   }
 
-
-  if (year_start != '' & year_end != '') {
-    strYearsType <- paste0('/years')
-    strYears <- paste0('/',year_start,',',year_end)
-    address <- paste0(urlAddress, strBeg, strCoord, strType, strMonthsDays, strYearsType,strYears,strexclude_years)
+  if (propertiesToInclude[1] != '') {
+    if (strexclude_years == '') {
+      propertiesString <- paste0('?properties=',paste0(propertiesToInclude,collapse = ','))
+    } else {
+      propertiesString <- paste0('&properties=',paste0(propertiesToInclude,collapse = ','))
+    }
   } else {
-    address <- paste0(urlAddress, strBeg, strCoord, strType, strMonthsDays, strexclude_years)
+    propertiesString <- ''
   }
+
+  strYearsType <- paste0('/years')
+  strYears <- paste0('/',year_start,',',year_end)
+  url <- paste0(urlAddress, strBeg, strCoord, strType, strMonthsDays, strYearsType,strYears,strexclude_years,propertiesString)
+
   doWeatherGet <- TRUE
   while (doWeatherGet == TRUE) {
-    requestString <- 'request <- httr::GET(address,
-    httr::add_headers(Authorization =
-    paste0(\"Bearer \", awhereEnv75247$token)))'
-    # Make request
-    eval(parse(text = requestString))
+    postbody = ''
+    request <- httr::GET(url, body = postbody, httr::content_type('application/json'),
+                         httr::add_headers(Authorization =paste0("Bearer ", tokenToUse)))
 
     a <- suppressMessages(httr::content(request, as = "text"))
 
-    #The JSONLITE Serializer properly handles the JSON conversion
-
-    x <- jsonlite::fromJSON(a,flatten = TRUE)
-
-    if (grepl('API Access Expired',a)) {
-      get_token(awhereEnv75247$uid,awhereEnv75247$secret)
-    } else {
-      doWeatherGet <- FALSE
-    }
+    doWeatherGet <- check_JSON(a,request)
   }
+
+  #The JSONLITE Serializer properly handles the JSON conversion
+  x <- jsonlite::fromJSON(a,flatten = TRUE)
 
   data <- data.table::as.data.table(x[[1]])
 
+  #Get rid of leap yearData
+  if (includeFeb29thData == FALSE) {
+    data <- data[day != '02-29',]
+  }
+
   varNames <- colnames(data)
   #This removes the non-data info returned with the JSON object
-  data[,grep('_links',varNames) := NULL, with = FALSE]
-  data[,grep('.units',varNames) := NULL, with = FALSE]
+  data[,grep('_links',varNames) := NULL]
+  data[,grep('.units',varNames) := NULL]
 
+  currentNames <- data.table::copy(colnames(data))
+  data[,latitude  := latitude]
+  data[,longitude := longitude]
+  data.table::setcolorder(data,c('latitude','longitude',currentNames))
 
-  setnames(data,varNames)
-  setkey(data,day)
+  aWhereAPI:::checkDataReturn_norms(data,monthday_start,monthday_end,year_start,year_end,exclude_years,includeFeb29thData)
 
   return(as.data.frame(data))
+}
+
+
+#' @title weather_norms_area
+#'
+#' @description
+#' \code{weather_norms_area} pulls long term norm weather data from aWhere's API based on spatial polygon or extent
+#'
+#' @details
+#' This function allows you to calculate the averages for weather attributes
+#' across any range of years for which data are available.  The data pulled includes
+#' meanTemp, maxTemp, minTemp, precipitation average, solar radiation average,
+#' minHumidity, maxHumidity, maxWind and averageWind, along with the standard deviations
+#' for these variables.  The polygon should be either a SpatialPolygons object or
+#' a well-known text character string or an extent.
+#'
+#' The data returned in this function
+#' allow you to compare this year or previous years to the long-term normals, calculated as
+#' the average of those weather conditions on that day in that location over the years specified.
+#'
+#' Note about dates: The system does not adjust for any difference in dates between the location of the user
+#'           and where data is being requested from.  It is the responsibility of the user to ensure a valid
+#'           date range is specified given any differences in timezone.  These differences can have implications
+#'           for whether a given date should be requested from the daily_observed functions or the forecast functions.
+#'           Furthermore, because this function can take as input locations that may be in different timezones, it is
+#'           the responsibility of the user to either ensure that the date range specified is valid for all relevant
+#'           locations or to break the query into pieces.
+#'
+#' @references http://developer.awhere.com/api/reference/weather/norms
+#'
+#' @param - polygon: either a SpatialPolygons object, well-known text string, or extent from raster package
+#' @param - monthday_start: character string of the first month and day for which you want to retrieve data,
+#'                          in the form: MM-DD.  This is the start of your date range. e.g. '07-01' (July 1) (required)
+#' @param - monthday_end: character string of the last month and day for which you want to retrieve data,
+#'                          in the form: MM-DD.  This is the end of your date range. e.g. '07-01' (July 1) (required)
+#' @param - year_start: character string of the starting year (inclusive) of the range of years for which
+#'                     you're calculating norms, in the form YYYY. e.g., 2008 (required)
+#' @param - year_end: character string of the last year (inclusive) of the range of years for which
+#'                     you're calculating norms, in the form YYYY. e.g., 2015 (required)
+#' @param - propertiesToInclude: character vector of properties to retrieve from API.  Valid values are meanTemp, maxTemp, minTemp, precipitation, solar, maxHumidity, minHumidity, dailyMaxWind (optional)
+#' @param - exclude_year: Year or years which you'd like to exclude from
+#'                        your range of years on which to calculate norms. To exclude
+#'                        multiple years, provide a vector of years. You must include
+#'                       at least three years of data with which to calculate the norms. (numeric, optional)
+#' @param - includeFeb29thData: Whether to keep data from Feb 29th on leap years.  Because weather/agronomics
+#'                              summary statistics are calculated via the calendar date and 3 years are required
+#'                              to generate a value, data from this date is more likely to be NA.  ALlows user
+#'                              to drop this data to avoid later problems (defaults to TRUE)
+#' @param - numcores: number of cores to use in parallel loop. To check number of available cores: parallel::detectCores().
+#'                    If you receive an error regarding the speed you are making calls, reduce this number
+#' @param - bypassNumCallCheck: set to TRUE to avoid prompting the user to confirm that they want to begin making API calls
+#' @param - keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#' @param - tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)
+#'
+#' @import httr
+#' @import data.table
+#' @import lubridate
+#' @import jsonlite
+#' @import raster
+#' @import foreach
+#' @import doParallel
+#' @import rgeos
+#'
+#' @return data.frame of requested data for dates requested
+#'
+#' @examples
+#' \dontrun{weather_norms_area(polygon = raster::getData('GADM', country = "Gambia", level = 0, download = T)
+#'                               ,monthday_start = '02-01'
+#'                               ,monthday_end = '03-10'
+#'                               ,year_start = 2008
+#'                               ,year_end = 2015
+#'                               ,exclude_years =  c(2010,2011)
+#'                               ,numcores = 2)}
+#' @export
+
+
+weather_norms_area <- function(polygon
+                               ,monthday_start
+                               ,monthday_end
+                               ,year_start
+                               ,year_end
+                               ,propertiesToInclude = ''
+                               ,exclude_years = NULL
+                               ,includeFeb29thData = TRUE
+                               ,numcores = 2
+                               ,bypassNumCallCheck = FALSE
+                               ,keyToUse = awhereEnv75247$uid
+                               ,secretToUse = awhereEnv75247$secret
+                               ,tokenToUse = awhereEnv75247$token) {
+
+  #Checking Input Parameters
+  checkCredentials(keyToUse,secretToUse,tokenToUse)
+  checkNormsStartEndDates(monthday_start,monthday_end)
+  checkNormsYearsToRequest(year_start,year_end,monthday_start,monthday_end,exclude_years)
+  checkPropertiesEndpoint('weather_norms',propertiesToInclude)
+
+  ##############################################################################
+
+  cat(paste0('Creating aWhere Raster Grid within Polygon\n'))
+  grid <- create_awhere_grid(polygon)
+
+  verify_api_calls(grid,bypassNumCallCheck)
+
+  cat(paste0('Requesting data using parallal API calls\n'))
+  doParallel::registerDoParallel(cores=numcores)
+
+  norms <- foreach::foreach(j=c(1:nrow(grid)), .packages = c("aWhereAPI")) %dopar% {
+
+
+    t <- weather_norms_latlng(latitude = grid$lat[j]
+                              ,longitude = grid$lon[j]
+                              ,monthday_start = monthday_start
+                              ,monthday_end = monthday_end
+                              ,year_start = year_start
+                              ,year_end = year_end
+                              ,propertiesToInclude = propertiesToInclude
+                              ,exclude_years =  exclude_years
+                              ,includeFeb29thData = includeFeb29thData
+                              ,keyToUse = keyToUse
+                              ,secretToUse = secretToUse
+                              ,tokenToUse = tokenToUse)
+
+    currentNames <- colnames(t)
+
+    t$gridy <- grid$gridy[j]
+    t$gridx <- grid$gridx[j]
+
+    data.table::setcolorder(t, c(currentNames[c(1:2)], "gridy", "gridx", currentNames[c(3:length(currentNames))]))
+
+    return(t)
+
+
+  }
+
+  norms <- data.table::rbindlist(norms)
+
+  return(as.data.frame(norms))
 }

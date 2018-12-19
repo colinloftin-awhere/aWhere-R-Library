@@ -4,18 +4,26 @@
 #' \code{get_token} gets Access Token for V2 aWhere API
 #'
 #' @details
-#' this script gets the aWHERE access token for the current session of the API
+#' This script provides an aWhere access token for the current session of the API. Information for the key and secret in this
+#' function can be found on a user's account at developer.awhere.com, under the apps.
 #'
-#' @param - uid: Username associated with the aWhere API
-#' @param - secret: Alphanumeric key associated with your aWhere API account
+#' @param - uid: Consumer key associated with the user's aWhere API account
+#' @param - secret: Consumer secret associated the user's aWhere API account
+#' @param - use_enviroment: Optional logical value, determines whether API access
+#' token will be saved in a local locked environment in addition to being returned
+#' by the function. Defaults to \code{TRUE} to avoid breaking existing code.
 #'
-#' @return None
+#' @return List with three elements:#'
+#' error: logical indicating whether there was an error
+#' error_message: \code{NULL} if error is \code{FALSE}, a character error message otherwise
+#' token: aWhere API access token value
 #'
 #' @examples
-#' \dontrun{get_token(uid, secret)}
+#' \dontrun{get_token("uid", "secret")}
+#' \dontrun{token_response <- get_token('uid', 'secret', use_environment = FALSE)}
 #' @export
 
-get_token <- function(uid, secret) {
+get_token <- function(uid, secret, use_environment = TRUE) {
 
   url <- "https://api.awhere.com/oauth/token"
 
@@ -28,43 +36,58 @@ get_token <- function(uid, secret) {
   a <- suppressMessages(httr::content(request, as = "text"))
 
   if (request$status_code != 200) {
-    warning('The UID/Secret combination is incorrect. \n')
-  }
+    error <- TRUE
+    error_message <- 'The UID/Secret combination is incorrect.'
+    token <- NULL
 
-  parsedResponse <- unlist(strsplit(a,split = "\""))
+    cat(paste(error_message, '\n'))
+  } else {
+    error <- FALSE
+    error_message <- NULL
 
-  if (exists('awhereEnv75247') == FALSE) {
-    awhereEnv75247 <- new.env()
-    assign('awhereEnv75247',awhereEnv75247,envir = baseenv())
-    rm(awhereEnv75247)
-  }
+    parsedResponse <- jsonlite::fromJSON(a, simplifyDataFrame = FALSE)
 
-  if (exists('uid',envir = awhereEnv75247,inherits = FALSE) == TRUE) {
-    if (bindingIsLocked('uid',awhereEnv75247) == TRUE) {
-      unlockBinding('uid',awhereEnv75247)
+    # Keeping environment approach for backward compatibility,
+    # but adding an optional argument to skip it.
+    if (use_environment) {
+      if (exists('awhereEnv75247') == FALSE) {
+        awhereEnv75247 <- new.env()
+        assign('awhereEnv75247',awhereEnv75247,envir = baseenv())
+        rm(awhereEnv75247)
+      }
+
+      if (exists('uid',envir = awhereEnv75247,inherits = FALSE) == TRUE) {
+        if (bindingIsLocked('uid',awhereEnv75247) == TRUE) {
+          unlockBinding('uid',awhereEnv75247)
+        }
+      }
+      if (exists('secret',where = awhereEnv75247,inherits = FALSE) == TRUE) {
+        if (bindingIsLocked('secret',awhereEnv75247) == TRUE) {
+          unlockBinding('secret',awhereEnv75247)
+        }
+      }
+      if (exists('token',where = awhereEnv75247,inherits = FALSE) == TRUE) {
+        if (bindingIsLocked('token',awhereEnv75247) == TRUE) {
+          unlockBinding('token',awhereEnv75247)
+        }
+      }
+
+      awhereEnv75247$uid    <- uid
+      awhereEnv75247$secret <- secret
+      awhereEnv75247$token  <- token <- parsedResponse$access_token
+
+      lockBinding('uid',    awhereEnv75247)
+      lockBinding('secret', awhereEnv75247)
+      lockBinding('token',  awhereEnv75247)
+
+      lockEnvironment(awhereEnv75247,bindings = TRUE)
+      rm(awhereEnv75247)
     }
   }
-  if (exists('secret',where = awhereEnv75247,inherits = FALSE) == TRUE) {
-    if (bindingIsLocked('secret',awhereEnv75247) == TRUE) {
-      unlockBinding('secret',awhereEnv75247)
-    }
-  }
-  if (exists('token',where = awhereEnv75247,inherits = FALSE) == TRUE) {
-    if (bindingIsLocked('token',awhereEnv75247) == TRUE) {
-      unlockBinding('token',awhereEnv75247)
-    }
-  }
 
-  awhereEnv75247$uid    <- uid
-  awhereEnv75247$secret <- secret
-  awhereEnv75247$token  <- parsedResponse[4]
-
-  lockBinding('uid',    awhereEnv75247)
-  lockBinding('secret', awhereEnv75247)
-  lockBinding('token',  awhereEnv75247)
-
-  lockEnvironment(awhereEnv75247,bindings = TRUE)
-  rm(awhereEnv75247)
+  return(list(error = error
+              ,error_message = error_message
+              ,token = token))
 }
 
 #' @title Load Credentials.
@@ -96,5 +119,39 @@ load_credentials <- function(path_to_credentials) {
   secret <- credentials[2]
 
   get_token(uid, secret)
+}
+
+#' @title Check JSON Object
+#'
+#' @description
+#' \code{check_JSON} Checks to make sure JSON object isn't an error
+#'
+#' @details
+#' Checks that aWhere API didn't return an error code and that the token used in query hasn't expired
+#'
+#' @param - JSON object returned from aWhere API
+#' @return boolean for whether another query should be made
+
+check_JSON <- function(jsonObject, request) {
+  aWhereAPI:::checkStatusCode(request)
+  
+  if (any(grepl('API Access Expired',jsonObject))) {
+    if(exists("awhereEnv75247")) {
+      if(tokenToUse == awhereEnv75247$token) {
+        get_token(keyToUse,secretToUse)
+        tokenToUse <- awhereEnv75247$token
+
+        doWeatherGet <- TRUE
+      } else {
+        stop("The token you passed in has expired. Please request a new one and retry your function call with the new token.")
+      }
+    } else {
+      stop("The token you passed in has expired. Please request a new one and retry your function call with the new token.")
+    }
+  } else {
+    doWeatherGet <- FALSE
+  }
+
+  return(doWeatherGet)
 }
 

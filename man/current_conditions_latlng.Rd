@@ -2,9 +2,11 @@
 % Please edit documentation in R/current-conditions.R
 \name{current_conditions_latlng}
 \alias{current_conditions_latlng}
-\title{current_conditions_latlng.}
+\title{current_conditions_latlng}
 \usage{
-current_conditions_latlng(latitude, longitude, sources = "all")
+current_conditions_latlng(latitude, longitude, sources = "all",
+  keyToUse = awhereEnv75247$uid, secretToUse = awhereEnv75247$secret,
+  tokenToUse = awhereEnv75247$token)
 }
 \arguments{
 \item{-}{latitude: the latitude of the requested location}
@@ -13,6 +15,12 @@ current_conditions_latlng(latitude, longitude, sources = "all")
 
 \item{-}{sources: Which source to use for pulling the current conditions.  Valid values are
 'metar', 'mesonet', 'metar-mesonet', 'pws', 'all'.  Default value is 'all'}
+
+\item{-}{keyToUse: aWhere API key to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{secretToUse: aWhere API secret to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
+
+\item{-}{tokenToUse: aWhere API token to use.  For advanced use only.  Most users will not need to use this parameter (optional)}
 }
 \value{
 data.table of requested data for dates requested
@@ -21,8 +29,8 @@ data.table of requested data for dates requested
 \code{current_conditions_latlng} calls Current Weather Conditions Endpoint of API using Lat/Lon
 }
 \details{
-The Weather APIs provide access to aWhere's agriculture-specific Weather Terrain™ system,
-and allows retrieval and integration of data across all different time ranges—long term normals,
+The Weather APIs provide access to aWhere's agriculture-specific Weather Terrain system,
+and allows retrieval and integration of data across all different time ranges long term normals,
 daily observed, current weather, and forecasts. These APIs are designed for efficiency,
 allowing you to customize the responses to return just the attributes you need.
 
@@ -34,9 +42,8 @@ that is capable of hourly updates.  Uses the Lat/Lon construct for requesting da
 Uses default units returned by the API
 }
 \examples{
-\dontrun{current_conditions_latlng('39.8282', '-98.5795','all')}
+\dontrun{current_conditions_latlng(39.8282, -98.5795, 'all')}
 }
 \references{
 http://developer.awhere.com/api/reference/weather/current
 }
-
